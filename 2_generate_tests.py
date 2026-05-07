@@ -10,6 +10,7 @@ from benchmark_pipeline.fs_utils import dump_json, reset_directory, write_artifa
 from benchmark_pipeline.llm import parse_structured_response
 from benchmark_pipeline.models import GeneratedTests
 from benchmark_pipeline.prompts import build_test_prompt
+from benchmark_pipeline.validation import validate_generated_tests
 
 
 def main() -> None:
@@ -35,6 +36,7 @@ def main() -> None:
         ),
         user_input=build_test_prompt(repo_dir),
     )
+    validate_generated_tests(parsed)
 
     output_dir = Path(args.output_dir)
     print(f"[tests] Writing generated tests to {output_dir.resolve()}")

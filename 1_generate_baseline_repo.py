@@ -11,6 +11,7 @@ from benchmark_pipeline.llm import parse_structured_response
 from benchmark_pipeline.maven import run_maven_tests
 from benchmark_pipeline.models import GeneratedRepo
 from benchmark_pipeline.prompts import build_repo_prompt, build_repo_repair_prompt
+from benchmark_pipeline.validation import OutputValidationError, validate_generated_repo
 
 
 def generate_verified_repo(
@@ -33,6 +34,34 @@ def generate_verified_repo(
     )
 
     for attempt in range(max_repairs + 1):
+        try:
+            validate_generated_repo(parsed)
+        except OutputValidationError as exc:
+            if attempt == max_repairs:
+                raise RuntimeError(
+                    "Generated repository failed semantic validation after repair attempts.\n"
+                    f"{exc}"
+                ) from exc
+
+            print(
+                f"[baseline] Validation failed ({exc}). "
+                f"Requesting repair attempt {attempt + 1}/{max_repairs}"
+            )
+            parsed = parse_structured_response(
+                model=model,
+                schema=GeneratedRepo,
+                instructions=(
+                    "Repair the Java Maven repository so it matches the expected Maven project structure "
+                    "and passes verification. Return only structured data that matches the schema."
+                ),
+                user_input=build_repo_repair_prompt(
+                    repo_root=output_dir,
+                    project_name=project_name,
+                    build_output=str(exc),
+                ),
+            )
+            continue
+
         print(f"[baseline] Writing candidate repository to {output_dir}")
         reset_directory(output_dir)
         write_artifacts(output_dir, parsed.files)

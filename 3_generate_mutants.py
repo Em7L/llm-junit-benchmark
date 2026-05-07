@@ -10,6 +10,7 @@ from benchmark_pipeline.fs_utils import copy_tree_into, dump_json, reset_directo
 from benchmark_pipeline.llm import parse_structured_response
 from benchmark_pipeline.models import GeneratedMutants
 from benchmark_pipeline.prompts import build_mutation_prompt
+from benchmark_pipeline.validation import validate_generated_mutants
 
 
 def main() -> None:
@@ -36,6 +37,7 @@ def main() -> None:
         ),
         user_input=build_mutation_prompt(repo_dir, args.count),
     )
+    validate_generated_mutants(parsed)
 
     output_dir = Path(args.output_dir)
     print(f"[mutants] Preparing mutant output directory at {output_dir.resolve()}")
