@@ -1,17 +1,15 @@
 from __future__ import annotations
 
+"""CLI entrypoint for generating the baseline Maven repository with Agent 1."""
+
 import argparse
 from pathlib import Path
 
-from pipeline_common import (
-    DEFAULT_MODEL,
-    GeneratedRepo,
-    build_repo_prompt,
-    dump_json,
-    parse_response,
-    reset_directory,
-    write_artifacts,
-)
+from benchmark_pipeline.config import DEFAULT_MODEL
+from benchmark_pipeline.fs_utils import dump_json, reset_directory, write_artifacts
+from benchmark_pipeline.llm import parse_structured_response
+from benchmark_pipeline.models import GeneratedRepo
+from benchmark_pipeline.prompts import build_repo_prompt
 
 
 def main() -> None:
@@ -22,7 +20,7 @@ def main() -> None:
     parser.add_argument("--manifest", default="artifacts/manifests/baseline_repo.json", help="Where to store the structured response.")
     args = parser.parse_args()
 
-    parsed = parse_response(
+    parsed = parse_structured_response(
         model=args.model,
         schema=GeneratedRepo,
         instructions=(

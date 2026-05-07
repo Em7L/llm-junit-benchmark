@@ -1,18 +1,15 @@
 from __future__ import annotations
 
+"""CLI entrypoint for generating mutant repositories from the baseline project with Agent 3."""
+
 import argparse
 from pathlib import Path
 
-from pipeline_common import (
-    DEFAULT_MODEL,
-    GeneratedMutants,
-    build_mutation_prompt,
-    copy_into,
-    dump_json,
-    parse_response,
-    reset_directory,
-    write_artifacts,
-)
+from benchmark_pipeline.config import DEFAULT_MODEL
+from benchmark_pipeline.fs_utils import copy_tree_into, dump_json, reset_directory, write_artifacts
+from benchmark_pipeline.llm import parse_structured_response
+from benchmark_pipeline.models import GeneratedMutants
+from benchmark_pipeline.prompts import build_mutation_prompt
 
 
 def main() -> None:
@@ -28,7 +25,7 @@ def main() -> None:
     if not repo_dir.exists():
         raise FileNotFoundError(f"Repository not found: {repo_dir}")
 
-    parsed = parse_response(
+    parsed = parse_structured_response(
         model=args.model,
         schema=GeneratedMutants,
         instructions=(
@@ -44,7 +41,7 @@ def main() -> None:
     for mutant in parsed.mutants:
         mutant_dir = output_dir / mutant.mutant_id
         reset_directory(mutant_dir)
-        copy_into(repo_dir, mutant_dir)
+        copy_tree_into(repo_dir, mutant_dir)
         write_artifacts(mutant_dir, mutant.changed_files)
 
     dump_json(Path(args.manifest), parsed.model_dump())
