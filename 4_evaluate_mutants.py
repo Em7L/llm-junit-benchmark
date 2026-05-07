@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from benchmark_pipeline.evaluation import evaluate_repositories, write_evaluation_json
-from benchmark_pipeline.reports import invalid_baseline_report, markdown_report
+from benchmark_pipeline.reports import markdown_report
 
 
 def main() -> None:
@@ -47,18 +47,6 @@ def main() -> None:
     print(f"[evaluation] Writing JSON report to {Path(args.report_json).resolve()}")
     write_evaluation_json(Path(args.report_json), outcome)
     Path(args.report_md).parent.mkdir(parents=True, exist_ok=True)
-    if outcome.mutation_score is None:
-        print(f"[evaluation] Writing markdown report to {Path(args.report_md).resolve()}")
-        Path(args.report_md).write_text(
-            invalid_baseline_report(outcome.baseline_result, outcome.baseline_coverage),
-            encoding="utf-8",
-        )
-        print("Baseline repo passed: False")
-        print("Mutation evaluation aborted: baseline failed.")
-        print(f"JSON report: {Path(args.report_json).resolve()}")
-        print(f"Markdown report: {Path(args.report_md).resolve()}")
-        return
-
     print(f"[evaluation] Writing markdown report to {Path(args.report_md).resolve()}")
     Path(args.report_md).write_text(
         markdown_report(

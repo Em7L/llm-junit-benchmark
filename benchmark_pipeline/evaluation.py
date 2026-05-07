@@ -28,9 +28,6 @@ class EvaluationOutcome:
             "mutant_results": self.mutant_results,
             "mutation_score": self.mutation_score,
         }
-        if self.mutation_score is None:
-            payload["status"] = "invalid_baseline"
-            payload["message"] = "Baseline repository failed before mutant evaluation. Mutation score is not valid for this run."
         return payload
 
 
@@ -51,13 +48,7 @@ def evaluate_repositories(
             run_maven_command(staged_baseline, [maven_cmd[0], "jacoco:report", "-DskipTests"])
             baseline_coverage = parse_jacoco_report(staged_baseline / "target" / "site" / "jacoco" / "jacoco.xml")
 
-        if not baseline_result.passed:
-            return EvaluationOutcome(
-                baseline_result=baseline_result,
-                baseline_coverage=baseline_coverage,
-                mutant_results=[],
-                mutation_score=None,
-            )
+        baseline_failed_tests = set(baseline_result.failing_tests)
 
         mutant_results: list[dict[str, object]] = []
         mutant_dirs = sorted(path for path in mutants_dir.iterdir() if path.is_dir())
@@ -66,16 +57,20 @@ def evaluate_repositories(
             staged_dirs.append(staged_mutant)
 
             result = run_maven_tests(staged_mutant, maven_cmd)
+            new_failing_tests = sorted(set(result.failing_tests) - baseline_failed_tests)
+            killed = (not result.passed) if baseline_result.passed else bool(new_failing_tests)
             mutant_results.append(
                 {
                     "mutant_id": mutant_dir.name,
                     "description": f"Mutant repo at {mutant_dir.as_posix()}",
-                    "killed": not result.passed,
+                    "killed": killed,
                     "exit_code": result.exit_code,
                     "tests": result.tests,
                     "failures": result.failures,
                     "errors": result.errors,
                     "skipped": result.skipped,
+                    "failing_tests": result.failing_tests,
+                    "new_failing_tests": new_failing_tests,
                     "stdout": result.stdout,
                     "stderr": result.stderr,
                 }

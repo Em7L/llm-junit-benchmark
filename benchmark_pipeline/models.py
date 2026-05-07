@@ -44,6 +44,7 @@ class MavenResult:
     failures: int
     errors: int
     skipped: int
+    failing_tests: list[str]
     stdout: str
     stderr: str
 

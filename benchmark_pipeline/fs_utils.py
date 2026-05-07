@@ -13,6 +13,8 @@ from benchmark_pipeline.models import FileArtifact
 
 def safe_rel_path(raw_path: str) -> Path:
     normalized = raw_path.replace("\\", "/").strip()
+    if normalized.startswith("/"):
+        raise ValueError(f"Unsafe relative path: {raw_path!r}")
     candidate = Path(normalized)
     if not normalized or candidate.is_absolute():
         raise ValueError(f"Unsafe relative path: {raw_path!r}")

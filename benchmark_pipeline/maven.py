@@ -22,7 +22,9 @@ def run_maven_tests(repo_root: Path, maven_cmd: Sequence[str]) -> MavenResult:
         timeout=600,
         check=False,
     )
-    tests, failures, errors, skipped = parse_surefire_reports(repo_root / "target" / "surefire-reports")
+    report_dir = repo_root / "target" / "surefire-reports"
+    tests, failures, errors, skipped = parse_surefire_reports(report_dir)
+    failing_tests = parse_surefire_failing_tests(report_dir)
     return MavenResult(
         label=repo_root.name,
         exit_code=completed.returncode,
@@ -30,6 +32,7 @@ def run_maven_tests(repo_root: Path, maven_cmd: Sequence[str]) -> MavenResult:
         failures=failures,
         errors=errors,
         skipped=skipped,
+        failing_tests=failing_tests,
         stdout=completed.stdout,
         stderr=completed.stderr,
     )
@@ -78,6 +81,23 @@ def parse_surefire_reports(report_dir: Path) -> tuple[int, int, int, int]:
         totals[2] += int(root.attrib.get("errors", "0"))
         totals[3] += int(root.attrib.get("skipped", "0"))
     return tuple(totals)  # type: ignore[return-value]
+
+
+def parse_surefire_failing_tests(report_dir: Path) -> list[str]:
+    if not report_dir.exists():
+        return []
+
+    failing: set[str] = set()
+    for xml_file in report_dir.glob("TEST-*.xml"):
+        root = ET.fromstring(xml_file.read_text(encoding="utf-8"))
+        suite_name = root.attrib.get("name", "")
+        for testcase in root.findall("testcase"):
+            if testcase.find("failure") is None and testcase.find("error") is None:
+                continue
+            class_name = testcase.attrib.get("classname") or suite_name
+            test_name = testcase.attrib.get("name", "<unknown>")
+            failing.add(f"{class_name}#{test_name}")
+    return sorted(failing)
 
 
 def parse_jacoco_report(report_file: Path) -> JacocoCoverage | None:
