@@ -30,15 +30,21 @@ def main() -> None:
     if not mutants_dir.exists():
         raise FileNotFoundError(f"Mutants directory not found: {mutants_dir}")
 
+    print(f"[evaluation] Baseline repository: {baseline_repo.resolve()}")
+    print(f"[evaluation] Generated tests: {tests_dir.resolve()}")
+    print(f"[evaluation] Mutants directory: {mutants_dir.resolve()}")
+    print(f"[evaluation] Running Maven verification with: {' '.join(args.maven_cmd)}")
     outcome = evaluate_repositories(
         baseline_repo=baseline_repo,
         tests_dir=tests_dir,
         mutants_dir=mutants_dir,
         maven_cmd=args.maven_cmd,
     )
+    print(f"[evaluation] Writing JSON report to {Path(args.report_json).resolve()}")
     write_evaluation_json(Path(args.report_json), outcome)
     Path(args.report_md).parent.mkdir(parents=True, exist_ok=True)
     if outcome.mutation_score is None:
+        print(f"[evaluation] Writing markdown report to {Path(args.report_md).resolve()}")
         Path(args.report_md).write_text(
             invalid_baseline_report(outcome.baseline_result, outcome.baseline_coverage),
             encoding="utf-8",
@@ -49,6 +55,7 @@ def main() -> None:
         print(f"Markdown report: {Path(args.report_md).resolve()}")
         return
 
+    print(f"[evaluation] Writing markdown report to {Path(args.report_md).resolve()}")
     Path(args.report_md).write_text(
         markdown_report(
             outcome.baseline_result,

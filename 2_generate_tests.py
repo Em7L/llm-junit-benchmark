@@ -24,19 +24,23 @@ def main() -> None:
     if not repo_dir.exists():
         raise FileNotFoundError(f"Repository not found: {repo_dir}")
 
+    print(f"[tests] Reading baseline repository from {repo_dir.resolve()}")
+    print(f"[tests] Requesting generated test suite with model `{args.model}`")
     parsed = parse_structured_response(
         model=args.model,
         schema=GeneratedTests,
         instructions=(
-            "You are Agent 2. Generate a JUnit 5 test suite for the provided Java repository. "
+            "Generate a JUnit 5 test suite for the provided Java repository. "
             "Return only structured data that matches the schema."
         ),
         user_input=build_test_prompt(repo_dir),
     )
 
     output_dir = Path(args.output_dir)
+    print(f"[tests] Writing generated tests to {output_dir.resolve()}")
     reset_directory(output_dir)
     write_artifacts(output_dir, parsed.files)
+    print(f"[tests] Writing manifest to {Path(args.manifest).resolve()}")
     dump_json(Path(args.manifest), parsed.model_dump())
     print(f"Generated test suite at {output_dir.resolve()}")
 

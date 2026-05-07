@@ -25,25 +25,30 @@ def main() -> None:
     if not repo_dir.exists():
         raise FileNotFoundError(f"Repository not found: {repo_dir}")
 
+    print(f"[mutants] Reading baseline repository from {repo_dir.resolve()}")
+    print(f"[mutants] Requesting {args.count} mutants with model `{args.model}`")
     parsed = parse_structured_response(
         model=args.model,
         schema=GeneratedMutants,
         instructions=(
-            "You are Agent 3. Generate realistic single-bug mutants for the provided Java repository. "
+            "Generate realistic single-bug mutants for the provided Java repository. "
             "Return only structured data that matches the schema."
         ),
         user_input=build_mutation_prompt(repo_dir, args.count),
     )
 
     output_dir = Path(args.output_dir)
+    print(f"[mutants] Preparing mutant output directory at {output_dir.resolve()}")
     reset_directory(output_dir)
 
     for mutant in parsed.mutants:
         mutant_dir = output_dir / mutant.mutant_id
+        print(f"[mutants] Materializing {mutant.mutant_id} in {mutant_dir.resolve()}")
         reset_directory(mutant_dir)
         copy_tree_into(repo_dir, mutant_dir)
         write_artifacts(mutant_dir, mutant.changed_files)
 
+    print(f"[mutants] Writing manifest to {Path(args.manifest).resolve()}")
     dump_json(Path(args.manifest), parsed.model_dump())
     print(f"Generated {len(parsed.mutants)} mutants at {output_dir.resolve()}")
 

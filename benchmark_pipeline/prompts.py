@@ -26,7 +26,11 @@ def build_repo_prompt(project_name: str | None = None) -> str:
         - Configure the Maven Exec plugin so the app can be run with `mvn exec:java`.
         - Keep the code understandable enough that another agent can infer expected behavior and write tests.
         - The repository must compile on JDK 21.
+        - The repository must pass `mvn test` with zero failing tests.
+        - All returned files must be mutually consistent and compile together.
+        - Do not reference classes, methods, constructors, fields, or imports that are not defined in the returned repository.
         - Use package names and filenames consistent with the project.
+        - Ensure every package declaration matches its file path.
         - Prefer deterministic logic over IO-heavy code.
         - Include meaningful branching and validation logic.
         - Include at least one collection-based workflow.
@@ -37,6 +41,40 @@ def build_repo_prompt(project_name: str | None = None) -> str:
         - You may pick any suitable domain.
         - Include a short `README.md`.
         - Suggested project name: `{explicit_name}`. Adjust it if a better name matches the chosen domain.
+        """
+    ).strip()
+
+
+def build_repo_repair_prompt(repo_root: Path, project_name: str | None, build_output: str) -> str:
+    snapshot = repo_snapshot(repo_root, include_extensions={".java", ".xml", ".md"})
+    tree = tree_listing(repo_root)
+    explicit_name = project_name or "generated-java-app"
+    return textwrap.dedent(
+        f"""
+        The previously generated Maven/JDK21 repository did not compile or pass `mvn test`.
+
+        Suggested project name: `{explicit_name}`.
+
+        Current repository tree:
+        {tree}
+
+        Current repository files:
+        {snapshot}
+
+        Maven/compiler output:
+        ```
+        {build_output}
+        ```
+
+        Return a corrected full repository.
+
+        Requirements:
+        - Return the complete repository as full file contents, not partial patches.
+        - Preserve the same overall project idea unless the compiler errors force a structural correction.
+        - Fix all compilation, packaging, import, and reference inconsistencies.
+        - Ensure the returned repository passes `mvn test`.
+        - Do not reference classes, methods, constructors, fields, or imports that are not defined in the returned repository.
+        - Ensure package declarations, imports, file paths, and the Maven `mainClass` are all mutually consistent.
         """
     ).strip()
 
@@ -59,6 +97,9 @@ def build_test_prompt(repo_root: Path) -> str:
         - Put tests under `src/test/java`.
         - Do not modify production code.
         - Assume `pom.xml` already contains JUnit 5 and Surefire.
+        - Ensure the test files compile against the provided repository as-is.
+        - Do not invent classes, methods, constructors, or fields that do not exist in the repository snapshot.
+        - Ensure package declarations, imports, and file paths are consistent.
         - Prefer behavior-focused tests, not implementation-detail tests.
         - Cover normal cases, boundary cases, invalid-input cases, and cross-class workflow behavior where applicable.
         - Target meaningful branch coverage, not just method invocation coverage.
@@ -85,6 +126,8 @@ def build_mutation_prompt(repo_root: Path, mutant_count: int) -> str:
         - Each mutant should introduce exactly one realistic bug.
         - Each mutant should change as few files as possible.
         - Return full replacement content only for the changed files of each mutant.
+        - Keep package declarations, imports, file paths, and references internally consistent.
+        - Do not introduce unresolved references, broken imports, or mismatched package/file structures.
         - Prefer semantic bugs: off-by-one, wrong operator, missing validation, incorrect branch, bad formula.
         - Prefer mutants that change observable behavior for common inputs.
         - Avoid equivalent or likely-equivalent mutants.
@@ -92,6 +135,6 @@ def build_mutation_prompt(repo_root: Path, mutant_count: int) -> str:
         - Do not make formatting-only, naming-only, or refactoring-only changes.
         - Do not generate mutants whose behavior is identical for the obvious valid and invalid inputs a test suite should try.
         - Do not break the Maven layout or package names.
-        - Make the mutants compile if possible.
+        - Make every mutant compile unless the requested single bug inherently prevents compilation, which should be avoided.
         """
     ).strip()
