@@ -26,6 +26,10 @@ def main() -> None:
     if not repo_dir.exists():
         raise FileNotFoundError(f"Repository not found: {repo_dir}")
 
+    print()
+    print("-" * 72)
+    print("[mutants] Mutant generation")
+    print("-" * 72)
     print(f"[mutants] Reading baseline repository from {repo_dir.resolve()}")
     print(f"[mutants] Requesting {args.count} mutants with model `{args.model}`")
     parsed = parse_structured_response(
@@ -52,6 +56,7 @@ def main() -> None:
 
     print(f"[mutants] Writing manifest to {Path(args.manifest).resolve()}")
     dump_json(Path(args.manifest), parsed.model_dump())
+    print()
     print(f"Generated {len(parsed.mutants)} mutants at {output_dir.resolve()}")
 
 

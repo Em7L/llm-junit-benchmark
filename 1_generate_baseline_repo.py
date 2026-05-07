@@ -22,6 +22,7 @@ def generate_verified_repo(
     max_repairs: int,
     verify_cmd: list[str],
 ) -> GeneratedRepo:
+    print()
     print(f"[baseline] Requesting initial repository generation with model `{model}`")
     parsed = parse_structured_response(
         model=model,
@@ -34,6 +35,8 @@ def generate_verified_repo(
     )
 
     for attempt in range(max_repairs + 1):
+        print()
+        print(f"[baseline] Candidate attempt {attempt + 1}/{max_repairs + 1}")
         try:
             validate_generated_repo(parsed)
         except OutputValidationError as exc:
@@ -113,6 +116,10 @@ def main() -> None:
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
+    print()
+    print("-" * 72)
+    print("[baseline] Baseline repository generation")
+    print("-" * 72)
     print(f"[baseline] Output directory: {output_dir.resolve()}")
     parsed = generate_verified_repo(
         model=args.model,
@@ -123,6 +130,7 @@ def main() -> None:
     )
     print(f"[baseline] Writing manifest to {Path(args.manifest).resolve()}")
     dump_json(Path(args.manifest), parsed.model_dump())
+    print()
     print(f"Generated baseline repository at {output_dir.resolve()}")
 
 

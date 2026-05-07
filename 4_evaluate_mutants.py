@@ -30,6 +30,10 @@ def main() -> None:
     if not mutants_dir.exists():
         raise FileNotFoundError(f"Mutants directory not found: {mutants_dir}")
 
+    print()
+    print("-" * 72)
+    print("[evaluation] Mutation evaluation")
+    print("-" * 72)
     print(f"[evaluation] Baseline repository: {baseline_repo.resolve()}")
     print(f"[evaluation] Generated tests: {tests_dir.resolve()}")
     print(f"[evaluation] Mutants directory: {mutants_dir.resolve()}")
@@ -66,6 +70,7 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    print()
     print(f"Baseline repo passed: {outcome.baseline_result.passed}")
     if outcome.baseline_coverage is not None:
         print(f"Line coverage: {outcome.baseline_coverage.line_rate:.2%}")

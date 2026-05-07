@@ -25,6 +25,10 @@ def main() -> None:
     if not repo_dir.exists():
         raise FileNotFoundError(f"Repository not found: {repo_dir}")
 
+    print()
+    print("-" * 72)
+    print("[tests] Test suite generation")
+    print("-" * 72)
     print(f"[tests] Reading baseline repository from {repo_dir.resolve()}")
     print(f"[tests] Requesting generated test suite with model `{args.model}`")
     parsed = parse_structured_response(
@@ -44,6 +48,7 @@ def main() -> None:
     write_artifacts(output_dir, parsed.files)
     print(f"[tests] Writing manifest to {Path(args.manifest).resolve()}")
     dump_json(Path(args.manifest), parsed.model_dump())
+    print()
     print(f"Generated test suite at {output_dir.resolve()}")
 
 

@@ -41,6 +41,12 @@ OPENAI_MODEL=gpt-5.4-mini
 ## Run
 
 ```powershell
+python 0_run_pipeline.py
+```
+
+Or run each stage separately:
+
+```powershell
 python 1_generate_baseline_repo.py
 python 2_generate_tests.py
 python 3_generate_mutants.py --count 5
