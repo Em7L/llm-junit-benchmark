@@ -49,6 +49,8 @@ def main() -> None:
             outcome.baseline_result,
             outcome.baseline_coverage,
             outcome.pitest_result,
+            outcome.disabled_tests,
+            outcome.initial_baseline_result,
         ),
         encoding="utf-8",
     )
@@ -56,6 +58,8 @@ def main() -> None:
     print()
     print(f"Baseline repo passed: {outcome.baseline_result.passed}")
     print(f"Baseline run status: {outcome.baseline_result.status}")
+    if outcome.disabled_tests:
+        print(f"Disabled baseline-failing generated tests: {len(outcome.disabled_tests)}")
     if outcome.baseline_coverage is not None:
         print(f"Line coverage: {outcome.baseline_coverage.line_rate:.2%}")
         print(f"Branch coverage: {outcome.baseline_coverage.branch_rate:.2%}")

@@ -16,12 +16,12 @@ def safe_rel_path(raw_path: str) -> Path:
     if normalized.startswith("/"):
         raise ValueError(f"Unsafe relative path: {raw_path!r}")
     candidate = Path(normalized)
-    if not normalized or candidate.is_absolute():
+    if not normalized or candidate.is_absolute() or candidate.drive:
         raise ValueError(f"Unsafe relative path: {raw_path!r}")
 
     normalized = normalized.strip("/")
     candidate = Path(normalized)
-    if not normalized or ".." in candidate.parts:
+    if not normalized or candidate.is_absolute() or candidate.drive or ".." in candidate.parts:
         raise ValueError(f"Unsafe relative path: {raw_path!r}")
     return candidate
 

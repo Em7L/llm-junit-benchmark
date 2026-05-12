@@ -11,6 +11,8 @@ def markdown_report(
     baseline_result: MavenResult,
     baseline_coverage: JacocoCoverage | None,
     pitest_result: PitestResult | None,
+    disabled_tests: list[str] | None = None,
+    initial_baseline_result: MavenResult | None = None,
 ) -> str:
     lines = [
         "# Mutation Evaluation Report",
@@ -28,6 +30,18 @@ def markdown_report(
         lines.append(f"- Status reason: {baseline_result.status_reason}")
     if baseline_result.failing_tests:
         lines.append(f"- Baseline failing tests: `{len(baseline_result.failing_tests)}`")
+    if initial_baseline_result is not None:
+        lines.extend(
+            [
+                "",
+                "## Baseline Test Cleaning",
+                f"- Initial run status: `{initial_baseline_result.status}`",
+                f"- Initial failing tests: `{len(initial_baseline_result.failing_tests)}`",
+                f"- Disabled generated test methods: `{len(disabled_tests or [])}`",
+            ]
+        )
+        for test_id in disabled_tests or []:
+            lines.append(f"- `{test_id}`")
     lines.extend(
         [
             "",
@@ -51,7 +65,7 @@ def markdown_report(
         ]
     )
     if pitest_result is None:
-        lines.append("- PIT was skipped because the baseline test suite did not pass.")
+        lines.append("- PIT was skipped because the final baseline test suite did not pass.")
     else:
         lines.extend(
             [

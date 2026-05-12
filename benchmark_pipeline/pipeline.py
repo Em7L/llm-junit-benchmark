@@ -96,6 +96,8 @@ def write_reports(config: PipelineConfig, outcome: EvaluationOutcome) -> None:
             outcome.baseline_result,
             outcome.baseline_coverage,
             outcome.pitest_result,
+            outcome.disabled_tests,
+            outcome.initial_baseline_result,
         ),
         encoding="utf-8",
     )
