@@ -13,33 +13,32 @@ def get_client(model: str) -> OpenAI:
     raw_key = os.getenv("DEEPSEEK_API_KEY") if is_deepseek else os.getenv("OPENAI_API_KEY")
     key = raw_key.strip() if raw_key else None
 
-    # Guard against placeholder keys
     if not key or "your_" in key:
-
         provider = "DeepSeek" if is_deepseek else "OpenAI"
-        print(f"\n[ERROR] Missing {provider} API Key!")
-        print(f"Please edit the .env file and replace '{key}' with your actual key.")
-        exit(1)
+        raise RuntimeError(f"Missing {provider} API key. Configure the required key in .env.")
 
     if is_deepseek:
         return OpenAI(
             api_key=key,
             base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
         )
-    
+
     return OpenAI(api_key=key)
 
 
-def parse_structured_response(model: str, schema: type[BaseModel], instructions: str, user_input: str) -> BaseModel:
+def parse_structured_response(
+    model: str,
+    schema: type[BaseModel],
+    instructions: str,
+    user_input: str,
+) -> BaseModel:
     client = get_client(model)
     is_deepseek = "deepseek" in model.lower()
 
-    # If it's DeepSeek, we know we must use the fallback
     if is_deepseek:
         return _parse_with_fallback(client, model, schema, instructions, user_input)
 
     try:
-        # Try OpenAI standard structured outputs
         completion = client.beta.chat.completions.parse(
             model=model,
             messages=[
@@ -52,11 +51,11 @@ def parse_structured_response(model: str, schema: type[BaseModel], instructions:
         if parsed is None:
             raise RuntimeError("Model did not return structured output.")
         return parsed
-    except Exception as e:
-        # If the model doesn't support json_schema, use the universal fallback
-        if "response_format" in str(e) or "unavailable" in str(e):
+    except Exception as exc:
+        message = str(exc)
+        if "response_format" in message or "unavailable" in message:
             return _parse_with_fallback(client, model, schema, instructions, user_input)
-        raise e
+        raise
 
 
 def _parse_with_fallback(client: OpenAI, model: str, schema: type[BaseModel], instructions: str, user_input: str) -> BaseModel:

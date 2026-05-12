@@ -13,7 +13,7 @@ def main() -> None:
     base_manifest_dir = Path("artifacts/manifests/benchmarks")
 
     print("-" * 72)
-    print(f"[benchmark] Starting multi-model test generation benchmark")
+    print("[benchmark] Starting multi-model test generation benchmark")
     print(f"[benchmark] Target models: {', '.join(TEST_MODELS_LIST)}")
     print("-" * 72)
 

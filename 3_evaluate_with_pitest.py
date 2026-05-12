@@ -12,9 +12,8 @@ from benchmark_pipeline.reports import markdown_report
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run generated JUnit tests against the baseline and evaluate them with PIT.")
     parser.add_argument("--baseline-repo", default="artifacts/baseline_repo", help="Path to the baseline repository.")
-    parser.add_argument("--tests-dir", default="artifacts/benchmarks", help="Path to the generated test files.")
+    parser.add_argument("--tests-dir", default="artifacts/generated_tests", help="Path to one generated test suite, or a directory containing multiple suite subdirectories.")
     parser.add_argument("--report-json", default="artifacts/reports/evaluation_report.json", help="Path to the JSON report.")
-
     parser.add_argument("--report-md", default="artifacts/reports/evaluation_report.md", help="Path to the Markdown report.")
     parser.add_argument("--pitest-report-dir", default="artifacts/reports/pit-reports", help="Directory where PIT XML/HTML reports are copied after evaluation.")
     parser.add_argument("--maven-cmd", nargs="+", default=["mvn", "test"], help="Command used to run Maven tests.")
@@ -28,7 +27,7 @@ def main() -> None:
     if not tests_dir.exists():
         raise FileNotFoundError(f"Tests directory not found: {tests_dir}")
 
-    # Determine if tests_dir is a single suite (contains 'src') or a directory of suites (like artifacts/benchmarks)
+    # A single suite contains src/. A benchmark directory contains one suite per child directory.
     if (tests_dir / "src").exists() or (tests_dir / "pom.xml").exists():
         test_suites = [tests_dir]
     else:
@@ -39,8 +38,7 @@ def main() -> None:
     for suite_dir in test_suites:
         is_multi = len(test_suites) > 1
         suite_name = suite_dir.name if is_multi else "evaluation"
-        
-        # Adjust report paths for multi-suite evaluation
+
         report_json = Path(args.report_json).parent / f"{suite_name}_report.json" if is_multi else Path(args.report_json)
         report_md = Path(args.report_md).parent / f"{suite_name}_report.md" if is_multi else Path(args.report_md)
         pitest_report_dir = Path(args.pitest_report_dir) / suite_name if is_multi else Path(args.pitest_report_dir)

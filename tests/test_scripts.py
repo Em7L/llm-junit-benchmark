@@ -178,7 +178,7 @@ class TestScripts(unittest.TestCase):
         report_json = self.root / "report.json"
         report_md = self.root / "report.md"
         baseline_repo.mkdir()
-        tests_dir.mkdir()
+        (tests_dir / "src/test/java").mkdir(parents=True)
         outcome = EvaluationOutcome(
             baseline_result=passed_maven(),
             baseline_coverage=None,

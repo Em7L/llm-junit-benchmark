@@ -11,9 +11,9 @@ from benchmark_pipeline.pipeline import PipelineConfig, run_pipeline
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the full repository -> tests -> PIT evaluation pipeline.")
-    parser.add_argument("--repo-model", default=REPO_GEN_MODEL, help="Model for baseline repo generation.")
-    parser.add_argument("--tests-model", default=TEST_GEN_MODEL, help="Model for test generation.")
-
+    parser.add_argument("--model", default=None, help="Default model used when repo/test models are not set separately.")
+    parser.add_argument("--repo-model", default=None, help="Model for baseline repo generation.")
+    parser.add_argument("--tests-model", default=None, help="Model for test generation.")
     parser.add_argument("--project-name", default="generated-java-app", help="Suggested project name for baseline generation.")
     parser.add_argument("--baseline-repo", default="artifacts/baseline_repo", help="Baseline repository output directory.")
     parser.add_argument("--tests-dir", default="artifacts/generated_tests", help="Generated tests output directory.")
@@ -27,9 +27,8 @@ def main() -> None:
     args = parser.parse_args()
 
     config = PipelineConfig(
-        repo_model=args.repo_model,
-        tests_model=args.tests_model,
-
+        repo_model=args.repo_model or args.model or REPO_GEN_MODEL,
+        tests_model=args.tests_model or args.model or TEST_GEN_MODEL,
         project_name=args.project_name,
         baseline_repo=Path(args.baseline_repo),
         tests_dir=Path(args.tests_dir),

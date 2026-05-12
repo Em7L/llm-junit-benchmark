@@ -85,6 +85,7 @@ class TestGenerationOrchestration(unittest.TestCase):
 
         with (
             patch("benchmark_pipeline.tests_generation.parse_structured_response", return_value=generated),
+            patch("benchmark_pipeline.tests_generation.run_maven_tests", return_value=passed_maven_result()),
             redirect_stdout(StringIO()),
         ):
             result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model")
@@ -116,11 +117,100 @@ class TestGenerationOrchestration(unittest.TestCase):
             patch("benchmark_pipeline.tests_generation.parse_structured_response", return_value=generated),
             redirect_stdout(StringIO()),
         ):
-            with self.assertRaisesRegex(ValueError, "invalid file paths"):
+            with self.assertRaisesRegex(RuntimeError, "failed semantic validation after repair attempts"):
                 generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model")
 
         self.assertTrue(sentinel.exists())
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "previous output")
+
+    def test_generate_tests_repairs_semantically_invalid_output(self) -> None:
+        repo_dir = self.root / "repo"
+        repo_dir.mkdir()
+        output_dir = self.root / "generated-tests"
+        invalid = GeneratedTests(
+            summary="bad tests",
+            files=[
+                FileArtifact(
+                    path="src/main/java/com/example/AppTest.java",
+                    content="class AppTest {}",
+                )
+            ],
+        )
+        repaired = GeneratedTests(
+            summary="repaired tests",
+            files=[
+                FileArtifact(
+                    path="src/test/java/com/example/AppTest.java",
+                    content="class AppTest {}",
+                )
+            ],
+        )
+
+        with (
+            patch("benchmark_pipeline.tests_generation.parse_structured_response", side_effect=[invalid, repaired]) as parse,
+            patch("benchmark_pipeline.tests_generation.run_maven_tests", return_value=passed_maven_result()) as run_maven_tests,
+            redirect_stdout(StringIO()),
+        ):
+            result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=1)
+
+        self.assertIs(result, repaired)
+        self.assertEqual(parse.call_count, 2)
+        self.assertEqual(run_maven_tests.call_count, 1)
+        self.assertTrue((output_dir / "src/test/java/com/example/AppTest.java").exists())
+
+    def test_generate_tests_fails_after_semantic_repair_budget_is_exhausted(self) -> None:
+        repo_dir = self.root / "repo"
+        repo_dir.mkdir()
+        output_dir = self.root / "generated-tests"
+        invalid = GeneratedTests(
+            summary="bad tests",
+            files=[
+                FileArtifact(
+                    path="src/main/java/com/example/AppTest.java",
+                    content="class AppTest {}",
+                )
+            ],
+        )
+
+        with (
+            patch("benchmark_pipeline.tests_generation.parse_structured_response", return_value=invalid) as parse,
+            patch("benchmark_pipeline.tests_generation.run_maven_tests") as run_maven_tests,
+            redirect_stdout(StringIO()),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "failed semantic validation after repair attempts"):
+                generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=1)
+
+        self.assertEqual(parse.call_count, 2)
+        run_maven_tests.assert_not_called()
+        self.assertFalse(output_dir.exists())
+
+    def test_generate_tests_repairs_after_failed_maven_verification(self) -> None:
+        repo_dir = self.root / "repo"
+        repo_dir.mkdir()
+        output_dir = self.root / "generated-tests"
+        broken = GeneratedTests(
+            summary="broken tests",
+            files=[
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class BrokenTest {}")
+            ],
+        )
+        repaired = GeneratedTests(
+            summary="repaired tests",
+            files=[
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class AppTest {}")
+            ],
+        )
+
+        with (
+            patch("benchmark_pipeline.tests_generation.parse_structured_response", side_effect=[broken, repaired]) as parse,
+            patch("benchmark_pipeline.tests_generation.run_maven_tests", side_effect=[failed_maven_result(), passed_maven_result()]) as run_maven_tests,
+            redirect_stdout(StringIO()),
+        ):
+            result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=1)
+
+        self.assertIs(result, repaired)
+        self.assertEqual(parse.call_count, 2)
+        self.assertEqual(run_maven_tests.call_count, 2)
 
     def test_generate_verified_repo_repairs_after_failed_build(self) -> None:
         output_dir = self.root / "repo"

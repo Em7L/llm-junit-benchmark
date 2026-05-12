@@ -10,7 +10,7 @@ from benchmark_pipeline.llm import parse_structured_response
 from benchmark_pipeline.maven import run_maven_tests
 from benchmark_pipeline.models import GeneratedTests
 from benchmark_pipeline.prompts import build_test_prompt, build_test_repair_prompt
-from benchmark_pipeline.validation import validate_generated_tests
+from benchmark_pipeline.validation import OutputValidationError, validate_generated_tests
 
 
 def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs: int = 2, maven_cmd: list[str] | None = None) -> GeneratedTests:
@@ -39,7 +39,32 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
     for attempt in range(max_repairs + 1):
         print()
         print(f"[tests] Candidate attempt {attempt + 1}/{max_repairs + 1}")
-        validate_generated_tests(parsed)
+        try:
+            validate_generated_tests(parsed)
+        except OutputValidationError as exc:
+            if attempt == max_repairs:
+                raise RuntimeError(
+                    "Generated test suite failed semantic validation after repair attempts.\n"
+                    f"{exc}"
+                ) from exc
+
+            print(
+                f"[tests] Validation failed ({exc}). "
+                f"Requesting repair attempt {attempt + 1}/{max_repairs}"
+            )
+            parsed = parse_structured_response(
+                model=model,
+                schema=GeneratedTests,
+                instructions=(
+                    "Repair the JUnit 5 test suite so it matches the expected Maven test structure. "
+                    "Return only structured data that matches the schema."
+                ),
+                user_input=build_test_repair_prompt(
+                    repo_root=repo_dir,
+                    build_output=str(exc),
+                ),
+            )
+            continue
 
         print(f"[tests] Writing generated tests to {output_dir.resolve()}")
         reset_directory(output_dir)
@@ -59,7 +84,7 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
             return parsed
 
         if attempt == max_repairs:
-            print(f"[tests] Verification failed and no repair attempts remain. Proceeding with failing tests.")
+            print("[tests] Verification failed and no repair attempts remain. Keeping the final generated suite for evaluation.")
             break
 
         print(

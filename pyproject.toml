@@ -1,0 +1,9 @@
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+ignore = [
+    # This project keeps `from __future__ import annotations` before module
+    # docstrings. Ignore this style-only rule to avoid a repo-wide header churn.
+    "E402",
+]

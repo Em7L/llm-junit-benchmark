@@ -13,8 +13,19 @@ from benchmark_pipeline.models import GeneratedTests
 class TestLlmStructuredResponse(unittest.TestCase):
     def test_parse_structured_response_returns_parsed_schema_object(self) -> None:
         parsed = GeneratedTests(summary="ok", files=[])
+        completion = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(parsed=parsed),
+                )
+            ]
+        )
         client = SimpleNamespace(
-            responses=SimpleNamespace(parse=Mock(return_value=SimpleNamespace(output_parsed=parsed)))
+            beta=SimpleNamespace(
+                chat=SimpleNamespace(
+                    completions=SimpleNamespace(parse=Mock(return_value=completion))
+                )
+            )
         )
 
         with patch("benchmark_pipeline.llm.get_client", return_value=client):
@@ -26,16 +37,27 @@ class TestLlmStructuredResponse(unittest.TestCase):
             )
 
         self.assertIs(result, parsed)
-        client.responses.parse.assert_called_once()
-        kwargs = client.responses.parse.call_args.kwargs
+        client.beta.chat.completions.parse.assert_called_once()
+        kwargs = client.beta.chat.completions.parse.call_args.kwargs
         self.assertEqual(kwargs["model"], "test-model")
-        self.assertEqual(kwargs["text_format"], GeneratedTests)
-        self.assertEqual(kwargs["input"][0]["role"], "system")
-        self.assertEqual(kwargs["input"][1]["role"], "user")
+        self.assertEqual(kwargs["response_format"], GeneratedTests)
+        self.assertEqual(kwargs["messages"][0]["role"], "system")
+        self.assertEqual(kwargs["messages"][1]["role"], "user")
 
     def test_parse_structured_response_rejects_unparsed_model_output(self) -> None:
+        completion = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(parsed=None),
+                )
+            ]
+        )
         client = SimpleNamespace(
-            responses=SimpleNamespace(parse=Mock(return_value=SimpleNamespace(output_parsed=None)))
+            beta=SimpleNamespace(
+                chat=SimpleNamespace(
+                    completions=SimpleNamespace(parse=Mock(return_value=completion))
+                )
+            )
         )
 
         with patch("benchmark_pipeline.llm.get_client", return_value=client):
