@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from benchmark_pipeline.config import DEFAULT_MODEL
+from benchmark_pipeline.config import TEST_GEN_MODEL
 from benchmark_pipeline.fs_utils import dump_json
 from benchmark_pipeline.tests_generation import generate_tests
 
@@ -14,7 +14,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a JUnit 5 test suite with Agent 2.")
     parser.add_argument("--repo-dir", default="artifacts/baseline_repo", help="Path to the baseline repository.")
     parser.add_argument("--output-dir", default="artifacts/generated_tests", help="Directory to write generated test files into.")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model for Agent 2.")
+    parser.add_argument("--model", default=TEST_GEN_MODEL, help="Model for Agent 2.")
+
     parser.add_argument("--manifest", default="artifacts/manifests/generated_tests.json", help="Where to store the structured response.")
     args = parser.parse_args()
 

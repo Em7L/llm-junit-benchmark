@@ -107,3 +107,33 @@ def build_test_prompt(repo_root: Path) -> str:
         - Keep the suite deterministic.
         """
     ).strip()
+
+
+def build_test_repair_prompt(repo_root: Path, build_output: str) -> str:
+    snapshot = repo_snapshot(repo_root, include_extensions={".java", ".xml", ".md"})
+    tree = tree_listing(repo_root)
+    return textwrap.dedent(
+        f"""
+        The previously generated JUnit 5 test suite failed to compile or pass `mvn test`.
+
+        Here is the repository tree:
+        {tree}
+
+        Here are the repository files (including the failing tests):
+        {snapshot}
+
+        Maven/compiler output:
+        ```
+        {build_output}
+        ```
+
+        Return a corrected test suite.
+
+        Requirements:
+        - Return only repository-relative test files to add/update in the repo.
+        - Fix all compilation errors, import issues, and test failures.
+        - Ensure the returned test suite passes `mvn test`.
+        - Do not modify production code.
+        - Do not invent classes, methods, constructors, or fields that do not exist in the production code.
+        """
+    ).strip()

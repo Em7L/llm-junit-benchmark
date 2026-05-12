@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from benchmark_pipeline.config import DEFAULT_MODEL
+from benchmark_pipeline.config import REPO_GEN_MODEL
 from benchmark_pipeline.fs_utils import dump_json
 from benchmark_pipeline.repo_generation import generate_verified_repo
 
@@ -13,7 +13,8 @@ from benchmark_pipeline.repo_generation import generate_verified_repo
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a baseline Maven/JDK21 repository with Agent 1.")
     parser.add_argument("--output-dir", default="artifacts/baseline_repo", help="Directory to write the generated repository into.")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model for Agent 1.")
+    parser.add_argument("--model", default=REPO_GEN_MODEL, help="Model for Agent 1.")
+
     parser.add_argument("--project-name", default="generated-java-app", help="Suggested project name.")
     parser.add_argument("--manifest", default="artifacts/manifests/baseline_repo.json", help="Where to store the structured response.")
     parser.add_argument("--verify-cmd", nargs="+", default=["mvn", "test"], help="Command used to verify the generated repository.")
