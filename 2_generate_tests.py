@@ -6,11 +6,8 @@ import argparse
 from pathlib import Path
 
 from benchmark_pipeline.config import DEFAULT_MODEL
-from benchmark_pipeline.fs_utils import dump_json, reset_directory, write_artifacts
-from benchmark_pipeline.llm import parse_structured_response
-from benchmark_pipeline.models import GeneratedTests
-from benchmark_pipeline.prompts import build_test_prompt
-from benchmark_pipeline.validation import validate_generated_tests
+from benchmark_pipeline.fs_utils import dump_json
+from benchmark_pipeline.tests_generation import generate_tests
 
 
 def main() -> None:
@@ -21,35 +18,15 @@ def main() -> None:
     parser.add_argument("--manifest", default="artifacts/manifests/generated_tests.json", help="Where to store the structured response.")
     args = parser.parse_args()
 
-    repo_dir = Path(args.repo_dir)
-    if not repo_dir.exists():
-        raise FileNotFoundError(f"Repository not found: {repo_dir}")
-
-    print()
-    print("-" * 72)
-    print("[tests] Test suite generation")
-    print("-" * 72)
-    print(f"[tests] Reading baseline repository from {repo_dir.resolve()}")
-    print(f"[tests] Requesting generated test suite with model `{args.model}`")
-    parsed = parse_structured_response(
+    parsed = generate_tests(
+        repo_dir=Path(args.repo_dir),
+        output_dir=Path(args.output_dir),
         model=args.model,
-        schema=GeneratedTests,
-        instructions=(
-            "Generate a JUnit 5 test suite for the provided Java repository. "
-            "Return only structured data that matches the schema."
-        ),
-        user_input=build_test_prompt(repo_dir),
     )
-    validate_generated_tests(parsed)
-
-    output_dir = Path(args.output_dir)
-    print(f"[tests] Writing generated tests to {output_dir.resolve()}")
-    reset_directory(output_dir)
-    write_artifacts(output_dir, parsed.files)
     print(f"[tests] Writing manifest to {Path(args.manifest).resolve()}")
     dump_json(Path(args.manifest), parsed.model_dump())
     print()
-    print(f"Generated test suite at {output_dir.resolve()}")
+    print(f"Generated test suite at {Path(args.output_dir).resolve()}")
 
 
 if __name__ == "__main__":

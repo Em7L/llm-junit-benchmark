@@ -9,7 +9,7 @@ The shared implementation now lives in the `benchmark_pipeline/` package, while 
    Generates a moderately complex Maven/JDK 21 Java repository with production code only.
 2. `2_generate_tests.py`
    Generates a JUnit 5 test suite for the baseline repository from step 1.
-3. `4_evaluate_mutants.py`
+3. `3_evaluate_with_pitest.py`
    Runs Agent 2's tests against the baseline repository, then writes a report with JaCoCo coverage and PIT mutation results.
 
 ## Expected local prerequisites
@@ -47,7 +47,7 @@ Or run each stage separately:
 ```powershell
 python 1_generate_baseline_repo.py
 python 2_generate_tests.py
-python 4_evaluate_mutants.py
+python 3_evaluate_with_pitest.py
 ```
 
 ## Outputs
