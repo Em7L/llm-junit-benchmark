@@ -4,26 +4,28 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from benchmark_pipeline.models import JacocoCoverage, MavenResult
+from benchmark_pipeline.models import JacocoCoverage, MavenResult, PitestResult
 
 
 def markdown_report(
     baseline_result: MavenResult,
     baseline_coverage: JacocoCoverage | None,
-    mutant_results: list[dict[str, object]],
-    mutation_score: float,
+    pitest_result: PitestResult | None,
 ) -> str:
     lines = [
         "# Mutation Evaluation Report",
         "",
         "## Baseline Repository",
         f"- Passed: `{baseline_result.passed}`",
+        f"- Run status: `{baseline_result.status}`",
         f"- Exit code: `{baseline_result.exit_code}`",
         f"- Tests: `{baseline_result.tests}`",
         f"- Failures: `{baseline_result.failures}`",
         f"- Errors: `{baseline_result.errors}`",
         f"- Skipped: `{baseline_result.skipped}`",
     ]
+    if baseline_result.status_reason:
+        lines.append(f"- Status reason: {baseline_result.status_reason}")
     if baseline_result.failing_tests:
         lines.append(f"- Baseline failing tests: `{len(baseline_result.failing_tests)}`")
     lines.extend(
@@ -45,36 +47,39 @@ def markdown_report(
     lines.extend(
         [
             "",
-            "## Mutants",
+            "## PIT Mutation Testing",
         ]
     )
-    for result in mutant_results:
-        extra = ""
-        if result.get("new_failing_tests"):
-            extra = f" new_failures=`{len(result['new_failing_tests'])}`"
+    if pitest_result is None:
+        lines.append("- PIT was skipped because the baseline test suite did not pass.")
+    else:
         lines.extend(
             [
-                f"- `{result['mutant_id']}`: killed=`{result['killed']}` exit_code=`{result['exit_code']}` failures=`{result['failures']}` errors=`{result['errors']}`{extra}",
-                f"  description: {result['description']}",
+                f"- Exit code: `{pitest_result.exit_code}`",
+                f"- Report file: `{pitest_result.report_file or 'not found'}`",
+                f"- Total mutations: `{pitest_result.total_mutations}`",
             ]
         )
-        if result.get("new_failing_tests"):
-            lines.append(f"  new failing tests: {', '.join(result['new_failing_tests'])}")
+        for status, count in sorted(pitest_result.status_counts.items()):
+            lines.append(f"- {status}: `{count}`")
     lines.extend(
         [
             "",
             "## Summary",
-            f"- Mutation score: `{mutation_score:.2%}`",
-            f"- Mutants killed: `{sum(1 for item in mutant_results if item['killed'])}/{len(mutant_results)}`",
         ]
     )
+    mutation_score = pitest_result.mutation_score if pitest_result is not None else None
+    if mutation_score is None:
+        lines.append("- Mutation score: `N/A`")
+    else:
+        lines.append(f"- Mutation score: `{mutation_score:.2%}`")
     if not baseline_result.passed:
         lines.extend(
             [
                 "",
                 "## Note",
-                "- Baseline tests already had failures.",
-                "- Mutants are counted as killed only when they introduce new failing tests beyond the baseline failure set.",
+                "- Baseline test validation did not pass.",
+                "- PIT mutation testing requires a green baseline test suite, so mutation scoring was skipped.",
             ]
         )
     return "\n".join(lines)
@@ -82,6 +87,10 @@ def markdown_report(
 
 def as_serializable_maven_result(result: MavenResult) -> dict[str, object]:
     return asdict(result)
+
+
+def as_serializable_pitest_result(result: PitestResult | None) -> dict[str, object] | None:
+    return asdict(result) if result is not None else None
 
 
 def as_serializable_coverage(coverage: JacocoCoverage | None) -> dict[str, object] | None:

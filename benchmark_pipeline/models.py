@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Structured data models used across generation, mutation, and evaluation stages."""
+"""Structured data models used across generation and evaluation stages."""
 
 from dataclasses import dataclass
 
@@ -24,22 +24,12 @@ class GeneratedTests(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
 
 
-class Mutant(BaseModel):
-    mutant_id: str
-    description: str
-    changed_files: list[FileArtifact]
-
-
-class GeneratedMutants(BaseModel):
-    source_project_name: str
-    summary: str
-    mutants: list[Mutant]
-
-
 @dataclass
 class MavenResult:
     label: str
     exit_code: int
+    status: str
+    status_reason: str | None
     tests: int
     failures: int
     errors: int
@@ -50,7 +40,37 @@ class MavenResult:
 
     @property
     def passed(self) -> bool:
-        return self.exit_code == 0 and self.failures == 0 and self.errors == 0
+        return self.status == "passed"
+
+
+@dataclass
+class PitestMutation:
+    mutant_id: str
+    detected: bool
+    status: str
+    number_of_tests_run: int
+    source_file: str
+    mutated_class: str
+    mutated_method: str
+    method_description: str
+    line_number: int | None
+    mutator: str
+    index: int | None
+    block: int | None
+    killing_test: str
+    description: str
+
+
+@dataclass
+class PitestResult:
+    exit_code: int
+    report_file: str | None
+    total_mutations: int
+    status_counts: dict[str, int]
+    mutation_score: float | None
+    mutations: list[PitestMutation]
+    stdout: str
+    stderr: str
 
 
 @dataclass

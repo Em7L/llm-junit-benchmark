@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Evaluation orchestration for executing tests and computing mutation results."""
+"""Evaluation orchestration for executing generated tests and PIT mutation analysis."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,24 +9,23 @@ from typing import Sequence
 
 from benchmark_pipeline.fs_utils import dump_json, stage_repo_with_tests
 from benchmark_pipeline.maven import parse_jacoco_report, run_maven_command, run_maven_tests
-from benchmark_pipeline.models import JacocoCoverage, MavenResult
-from benchmark_pipeline.reports import as_serializable_coverage, as_serializable_maven_result
+from benchmark_pipeline.models import JacocoCoverage, MavenResult, PitestResult
+from benchmark_pipeline.pitest import persist_pitest_reports, run_pitest
+from benchmark_pipeline.reports import as_serializable_coverage, as_serializable_maven_result, as_serializable_pitest_result
 
 
 @dataclass
 class EvaluationOutcome:
     baseline_result: MavenResult
     baseline_coverage: JacocoCoverage | None
-    mutant_results: list[dict[str, object]]
-    mutation_score: float | None
+    pitest_result: PitestResult | None
 
     @property
     def payload(self) -> dict[str, object]:
         payload = {
             "baseline_result": as_serializable_maven_result(self.baseline_result),
             "baseline_coverage": as_serializable_coverage(self.baseline_coverage),
-            "mutant_results": self.mutant_results,
-            "mutation_score": self.mutation_score,
+            "pitest_result": as_serializable_pitest_result(self.pitest_result),
         }
         return payload
 
@@ -34,8 +33,8 @@ class EvaluationOutcome:
 def evaluate_repositories(
     baseline_repo: Path,
     tests_dir: Path,
-    mutants_dir: Path,
     maven_cmd: Sequence[str],
+    pitest_report_dir: Path | None = None,
 ) -> EvaluationOutcome:
     staged_dirs: list[Path] = []
     try:
@@ -48,40 +47,13 @@ def evaluate_repositories(
             run_maven_command(staged_baseline, [maven_cmd[0], "jacoco:report", "-DskipTests"])
             baseline_coverage = parse_jacoco_report(staged_baseline / "target" / "site" / "jacoco" / "jacoco.xml")
 
-        baseline_failed_tests = set(baseline_result.failing_tests)
-
-        mutant_results: list[dict[str, object]] = []
-        mutant_dirs = sorted(path for path in mutants_dir.iterdir() if path.is_dir())
-        for mutant_dir in mutant_dirs:
-            staged_mutant = stage_repo_with_tests(mutant_dir, tests_dir)
-            staged_dirs.append(staged_mutant)
-
-            result = run_maven_tests(staged_mutant, maven_cmd)
-            new_failing_tests = sorted(set(result.failing_tests) - baseline_failed_tests)
-            killed = (not result.passed) if baseline_result.passed else bool(new_failing_tests)
-            mutant_results.append(
-                {
-                    "mutant_id": mutant_dir.name,
-                    "description": f"Mutant repo at {mutant_dir.as_posix()}",
-                    "killed": killed,
-                    "exit_code": result.exit_code,
-                    "tests": result.tests,
-                    "failures": result.failures,
-                    "errors": result.errors,
-                    "skipped": result.skipped,
-                    "failing_tests": result.failing_tests,
-                    "new_failing_tests": new_failing_tests,
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                }
-            )
-
-        mutation_score = sum(1 for item in mutant_results if item["killed"]) / len(mutant_results) if mutant_results else 0.0
+        pitest_result = run_pitest(staged_baseline, maven_cmd[0]) if baseline_result.passed else None
+        if pitest_result is not None and pitest_report_dir is not None:
+            persist_pitest_reports(pitest_result, pitest_report_dir)
         return EvaluationOutcome(
             baseline_result=baseline_result,
             baseline_coverage=baseline_coverage,
-            mutant_results=mutant_results,
-            mutation_score=mutation_score,
+            pitest_result=pitest_result,
         )
     finally:
         for staged_dir in staged_dirs:

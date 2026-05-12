@@ -25,9 +25,12 @@ def run_maven_tests(repo_root: Path, maven_cmd: Sequence[str]) -> MavenResult:
     report_dir = repo_root / "target" / "surefire-reports"
     tests, failures, errors, skipped = parse_surefire_reports(report_dir)
     failing_tests = parse_surefire_failing_tests(report_dir)
+    status, status_reason = classify_maven_result(completed.returncode, completed.stdout, completed.stderr, report_dir, failures, errors)
     return MavenResult(
         label=repo_root.name,
         exit_code=completed.returncode,
+        status=status,
+        status_reason=status_reason,
         tests=tests,
         failures=failures,
         errors=errors,
@@ -98,6 +101,33 @@ def parse_surefire_failing_tests(report_dir: Path) -> list[str]:
             test_name = testcase.attrib.get("name", "<unknown>")
             failing.add(f"{class_name}#{test_name}")
     return sorted(failing)
+
+
+def classify_maven_result(
+    exit_code: int,
+    stdout: str,
+    stderr: str,
+    report_dir: Path,
+    failures: int,
+    errors: int,
+) -> tuple[str, str | None]:
+    output = f"{stdout}\n{stderr}".lower()
+
+    if exit_code == 0:
+        return ("passed", None)
+    if "maven-compiler-plugin" in output and "testcompile" in output:
+        return ("test_compile_failure", "Test sources did not compile.")
+    if "maven-compiler-plugin" in output and "(default-compile)" in output:
+        return ("main_compile_failure", "Main sources did not compile.")
+    if failures > 0 or errors > 0:
+        return ("test_failures", "One or more tests failed.")
+    if has_surefire_reports(report_dir):
+        return ("test_execution_failure", "Maven reached test execution, but did not complete cleanly.")
+    return ("maven_failure", "Maven failed before producing test reports.")
+
+
+def has_surefire_reports(report_dir: Path) -> bool:
+    return report_dir.exists() and any(report_dir.glob("TEST-*.xml"))
 
 
 def parse_jacoco_report(report_file: Path) -> JacocoCoverage | None:

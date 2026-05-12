@@ -24,20 +24,16 @@ def run_step(label: str, command: list[str]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the full repository -> tests -> mutants -> evaluation pipeline.")
+    parser = argparse.ArgumentParser(description="Run the full repository -> tests -> PIT evaluation pipeline.")
     parser.add_argument("--python", default=sys.executable, help="Python executable used to run the pipeline scripts.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Default model passed to generation scripts.")
     parser.add_argument("--repo-model", default=None, help="Optional override model for baseline repo generation.")
     parser.add_argument("--tests-model", default=None, help="Optional override model for test generation.")
-    parser.add_argument("--mutants-model", default=None, help="Optional override model for mutant generation.")
     parser.add_argument("--project-name", default="generated-java-app", help="Suggested project name for baseline generation.")
-    parser.add_argument("--mutant-count", type=int, default=5, help="Number of mutants to generate.")
     parser.add_argument("--baseline-repo", default="artifacts/baseline_repo", help="Baseline repository output directory.")
     parser.add_argument("--tests-dir", default="artifacts/generated_tests", help="Generated tests output directory.")
-    parser.add_argument("--mutants-dir", default="artifacts/mutants", help="Generated mutants output directory.")
     parser.add_argument("--baseline-manifest", default="artifacts/manifests/baseline_repo.json", help="Manifest path for baseline generation.")
     parser.add_argument("--tests-manifest", default="artifacts/manifests/generated_tests.json", help="Manifest path for generated tests.")
-    parser.add_argument("--mutants-manifest", default="artifacts/manifests/generated_mutants.json", help="Manifest path for generated mutants.")
     parser.add_argument("--report-json", default="artifacts/reports/evaluation_report.json", help="JSON report path for evaluation.")
     parser.add_argument("--report-md", default="artifacts/reports/evaluation_report.md", help="Markdown report path for evaluation.")
     parser.add_argument("--maven-cmd", nargs="+", default=["mvn", "test"], help="Maven command used for baseline verification and evaluation.")
@@ -48,7 +44,6 @@ def main() -> None:
     python_executable = args.python
     repo_model = args.repo_model or args.model
     tests_model = args.tests_model or args.model
-    mutants_model = args.mutants_model or args.model
 
     print()
     print("=" * 72)
@@ -92,24 +87,7 @@ def main() -> None:
         ],
     )
     run_step(
-        "mutant generation",
-        [
-            python_executable,
-            str(root / "3_generate_mutants.py"),
-            "--repo-dir",
-            args.baseline_repo,
-            "--output-dir",
-            args.mutants_dir,
-            "--model",
-            mutants_model,
-            "--count",
-            str(args.mutant_count),
-            "--manifest",
-            args.mutants_manifest,
-        ],
-    )
-    run_step(
-        "evaluation",
+        "PIT evaluation",
         [
             python_executable,
             str(root / "4_evaluate_mutants.py"),
@@ -117,8 +95,6 @@ def main() -> None:
             args.baseline_repo,
             "--tests-dir",
             args.tests_dir,
-            "--mutants-dir",
-            args.mutants_dir,
             "--report-json",
             args.report_json,
             "--report-md",

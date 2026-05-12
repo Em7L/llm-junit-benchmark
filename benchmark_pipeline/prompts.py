@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Prompt builders for repository generation, test generation, and mutant generation."""
+"""Prompt builders for repository generation and test generation."""
 
 import textwrap
 from pathlib import Path
@@ -105,36 +105,5 @@ def build_test_prompt(repo_root: Path) -> str:
         - Target meaningful branch coverage, not just method invocation coverage.
         - Add tests that are likely to detect semantic mistakes in formulas, thresholds, validation rules, and formatting.
         - Keep the suite deterministic.
-        """
-    ).strip()
-
-
-def build_mutation_prompt(repo_root: Path, mutant_count: int) -> str:
-    snapshot = repo_snapshot(repo_root, include_extensions={".java", ".xml", ".md"})
-    tree = tree_listing(repo_root)
-    return textwrap.dedent(
-        f"""
-        Here is the repository tree:
-        {tree}
-
-        Here are the repository files:
-        {snapshot}
-
-        Generate {mutant_count} single-bug mutants for this Maven/JDK21 project.
-
-        Requirements:
-        - Each mutant should introduce exactly one realistic bug.
-        - Each mutant should change as few files as possible.
-        - Return full replacement content only for the changed files of each mutant.
-        - Keep package declarations, imports, file paths, and references internally consistent.
-        - Do not introduce unresolved references, broken imports, or mismatched package/file structures.
-        - Prefer semantic bugs: off-by-one, wrong operator, missing validation, incorrect branch, bad formula.
-        - Prefer mutants that change observable behavior for common inputs.
-        - Avoid equivalent or likely-equivalent mutants.
-        - Do not swap operands in commutative expressions unless another semantic change makes behavior observably different.
-        - Do not make formatting-only, naming-only, or refactoring-only changes.
-        - Do not generate mutants whose behavior is identical for the obvious valid and invalid inputs a test suite should try.
-        - Do not break the Maven layout or package names.
-        - Make every mutant compile unless the requested single bug inherently prevents compilation, which should be avoided.
         """
     ).strip()

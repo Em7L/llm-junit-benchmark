@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from benchmark_pipeline.models import GeneratedMutants, GeneratedRepo, GeneratedTests
+from benchmark_pipeline.models import GeneratedRepo, GeneratedTests
 
 
 class OutputValidationError(ValueError):
@@ -44,34 +44,6 @@ def validate_generated_tests(tests: GeneratedTests) -> None:
             "Generated test suite contains invalid file paths. "
             f"Expected only Java test files under src/test/java, got: {preview}"
         )
-
-
-def validate_generated_mutants(mutants: GeneratedMutants) -> None:
-    if not mutants.mutants:
-        raise OutputValidationError("Generated mutants response contains no mutants.")
-
-    mutant_ids: list[str] = []
-    for mutant in mutants.mutants:
-        mutant_id = mutant.mutant_id.strip()
-        if not mutant_id:
-            raise OutputValidationError("Generated mutant is missing mutant_id.")
-        if mutant_id in mutant_ids:
-            raise OutputValidationError(f"Duplicate mutant_id in generated mutants: {mutant_id}")
-        mutant_ids.append(mutant_id)
-
-        if not mutant.changed_files:
-            raise OutputValidationError(f"Mutant {mutant_id} contains no changed files.")
-
-        paths = [artifact.path for artifact in mutant.changed_files]
-        _validate_unique_paths(paths, f"mutant {mutant_id}")
-
-        invalid_paths = [path for path in paths if path == "pom.xml" or not path.endswith(".java")]
-        if invalid_paths:
-            preview = ", ".join(invalid_paths[:3])
-            raise OutputValidationError(
-                f"Mutant {mutant_id} contains invalid changed files. "
-                f"Expected Java source changes only, got: {preview}"
-            )
 
 
 def _validate_unique_paths(paths: list[str], label: str) -> None:

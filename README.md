@@ -1,6 +1,6 @@
 # AI Mutation Testing Pipeline
 
-This folder contains four Python scripts that orchestrate a small mutation-testing workflow driven by three separate OpenAI agent prompts.
+This folder contains Python scripts that orchestrate a small mutation-testing workflow driven by OpenAI agent prompts and PIT.
 The shared implementation now lives in the `benchmark_pipeline/` package, while the numbered scripts remain thin CLI entrypoints.
 
 ## Scripts
@@ -9,10 +9,8 @@ The shared implementation now lives in the `benchmark_pipeline/` package, while 
    Generates a moderately complex Maven/JDK 21 Java repository with production code only.
 2. `2_generate_tests.py`
    Generates a JUnit 5 test suite for the baseline repository from step 1.
-3. `3_generate_mutants.py`
-   Generates multiple single-bug mutant repositories from the baseline repository.
-4. `4_evaluate_mutants.py`
-   Runs Agent 2's tests against the baseline repository and each mutant, then writes a report with mutation results and JaCoCo coverage from the baseline run.
+3. `4_evaluate_mutants.py`
+   Runs Agent 2's tests against the baseline repository, then writes a report with JaCoCo coverage and PIT mutation results.
 
 ## Expected local prerequisites
 
@@ -49,7 +47,6 @@ Or run each stage separately:
 ```powershell
 python 1_generate_baseline_repo.py
 python 2_generate_tests.py
-python 3_generate_mutants.py --count 5
 python 4_evaluate_mutants.py
 ```
 
@@ -57,7 +54,6 @@ python 4_evaluate_mutants.py
 
 - `artifacts/baseline_repo`
 - `artifacts/generated_tests`
-- `artifacts/mutants`
 - `artifacts/manifests/*.json`
 - `artifacts/reports/evaluation_report.json`
 - `artifacts/reports/evaluation_report.md`
@@ -65,7 +61,7 @@ python 4_evaluate_mutants.py
 ## Notes
 
 - The implementation uses the OpenAI Responses API with structured outputs.
-- The evaluation uses multiple single-bug mutants because that gives you a mutation score, which is more informative than a single pass/fail result against one buggy repository.
+- The evaluation uses PIT mutation testing instead of AI-generated mutant repositories.
+- PIT is configured in the staged evaluation repository with pinned Maven plugin versions and XML/HTML report output.
 - Agent 1 is prompted to include JaCoCo XML coverage reporting in the generated Maven project.
 - Agent 1 is now prompted to generate a richer domain app with 6-10 production classes, branching, validation, and collection-based workflow logic.
-- Agent 3 is now prompted to avoid likely-equivalent mutants and prefer observable semantic bugs.
