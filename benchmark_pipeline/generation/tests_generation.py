@@ -137,10 +137,12 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
             validate_repair_did_not_drop_suite(previous, parsed)
         except OutputValidationError as exc:
             if attempt == max_repairs - 1:
-                raise RuntimeError(
-                    "Generated test suite repair dropped existing test files after repair attempts.\n"
-                    f"{exc}"
-                ) from exc
+                print(
+                    "[tests] Repair response was incomplete and no repair attempts remain. "
+                    "Keeping the last complete generated suite for evaluation."
+                )
+                parsed = previous
+                break
             print(f"[tests] Repair response was incomplete ({exc}). Requesting another repair.")
             parsed = previous
 

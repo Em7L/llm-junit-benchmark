@@ -114,8 +114,8 @@ def parse_pitest_mutations(report_file: Path) -> list[PitestMutation]:
             "method_description": _text(mutation, "methodDescription"),
             "line_number": _optional_int(_text(mutation, "lineNumber")),
             "mutator": _text(mutation, "mutator"),
-            "index": _optional_int(_text(mutation, "index")),
-            "block": _optional_int(_text(mutation, "block")),
+            "index": _optional_int(_mutation_position_text(mutation, "indexes", "index")),
+            "block": _optional_int(_mutation_position_text(mutation, "blocks", "block")),
             "description": _text(mutation, "description"),
         }
         mutant_id = "|".join(
@@ -190,6 +190,13 @@ def _find_dependency(dependencies: ET.Element, ns_prefix: str, group_id: str, ar
 def _text(element: ET.Element, tag: str, ns_prefix: str = "") -> str:
     child = element.find(f"{ns_prefix}{tag}")
     return (child.text or "").strip() if child is not None else ""
+
+
+def _mutation_position_text(element: ET.Element, container_tag: str, value_tag: str) -> str:
+    nested_value = element.find(f"{container_tag}/{value_tag}")
+    if nested_value is not None:
+        return (nested_value.text or "").strip()
+    return _text(element, value_tag)
 
 
 def _optional_int(value: str) -> int | None:

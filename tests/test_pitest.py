@@ -64,6 +64,36 @@ class TestPitestParsing(unittest.TestCase):
         self.assertEqual(mutation.mutated_class, "com.example.Calculator")
         self.assertEqual(mutation.line_number, 12)
         self.assertIn("com.example.Calculator|add|(II)I|12|", mutation.mutant_id)
+        self.assertEqual(mutation.index, 4)
+        self.assertEqual(mutation.block, 0)
+
+    def test_parses_nested_pitest_indexes_and_blocks(self) -> None:
+        report_file = self.root / "nested-mutations.xml"
+        report_file.write_text(
+            """<?xml version="1.0" encoding="UTF-8"?>
+<mutations>
+  <mutation detected="false" status="NO_COVERAGE" numberOfTestsRun="0">
+    <sourceFile>DiscountPolicy.java</sourceFile>
+    <mutatedClass>com.example.DiscountPolicy</mutatedClass>
+    <mutatedMethod>discountFor</mutatedMethod>
+    <methodDescription>()V</methodDescription>
+    <lineNumber>15</lineNumber>
+    <mutator>org.pitest.mutationtest.engine.gregor.mutators.ConditionalsBoundaryMutator</mutator>
+    <indexes><index>31</index></indexes>
+    <blocks><block>8</block></blocks>
+    <killingTest/>
+    <description>changed conditional boundary</description>
+  </mutation>
+</mutations>
+""",
+            encoding="utf-8",
+        )
+
+        mutation = parse_pitest_mutations(report_file)[0]
+
+        self.assertEqual(mutation.index, 31)
+        self.assertEqual(mutation.block, 8)
+        self.assertTrue(mutation.mutant_id.endswith("|31|8"))
 
 
 if __name__ == "__main__":

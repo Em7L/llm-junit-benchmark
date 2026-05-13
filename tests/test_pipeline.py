@@ -6,12 +6,13 @@ import json
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import _path  # noqa: F401
 
+from benchmark_pipeline.evaluation import EvaluationOutcome
 from benchmark_pipeline.evaluation.runner import EvaluationSuiteRun
-from benchmark_pipeline.models import GeneratedRepo, GeneratedTests, MavenResult
+from benchmark_pipeline.models import GeneratedRepo, GeneratedTests, MavenResult, PitestMutation, PitestResult
 from benchmark_pipeline.pipeline import PipelineConfig, run_pipeline, safe_model_name, test_manifest_path
 
 
@@ -23,21 +24,60 @@ def generated_tests() -> GeneratedTests:
     return GeneratedTests(summary="tests", files=[])
 
 
-def evaluation_outcome_mock() -> Mock:
-    return Mock(
-        baseline_result=MavenResult(
-            label="repo",
-            exit_code=0,
-            status="passed",
-            status_reason=None,
-            tests=0,
-            failures=0,
-            errors=0,
-            skipped=0,
-            failing_tests=[],
-            stdout="",
-            stderr="",
-        )
+def passed_maven() -> MavenResult:
+    return MavenResult(
+        label="repo",
+        exit_code=0,
+        status="passed",
+        status_reason=None,
+        tests=0,
+        failures=0,
+        errors=0,
+        skipped=0,
+        failing_tests=[],
+        stdout="",
+        stderr="",
+    )
+
+
+def evaluation_outcome(pitest_result: PitestResult | None = None) -> EvaluationOutcome:
+    return EvaluationOutcome(
+        baseline_result=passed_maven(),
+        baseline_coverage=None,
+        pitest_result=pitest_result,
+        disabled_tests=[],
+    )
+
+
+def pitest_result(mutant_ids: list[str]) -> PitestResult:
+    return PitestResult(
+        exit_code=0,
+        report_file="mutations.xml",
+        total_mutations=len(mutant_ids),
+        status_counts={"KILLED": len(mutant_ids)},
+        mutation_score=1.0 if mutant_ids else None,
+        mutations=[pitest_mutation(mutant_id) for mutant_id in mutant_ids],
+        stdout="",
+        stderr="",
+    )
+
+
+def pitest_mutation(mutant_id: str) -> PitestMutation:
+    return PitestMutation(
+        mutant_id=mutant_id,
+        detected=True,
+        status="KILLED",
+        number_of_tests_run=1,
+        source_file="App.java",
+        mutated_class="com.example.App",
+        mutated_method="run",
+        method_description="()V",
+        line_number=1,
+        mutator="mutator",
+        index=None,
+        block=None,
+        killing_test="AppTest",
+        description="test mutant",
     )
 
 
@@ -70,7 +110,7 @@ class TestPipeline(unittest.TestCase):
 
     def test_run_pipeline_composes_step_runners(self) -> None:
         config = self.config(("tests-model",))
-        evaluation = evaluation_outcome_mock()
+        evaluation = evaluation_outcome()
 
         with (
             patch("benchmark_pipeline.pipeline.run_baseline_generation", return_value=generated_repo()) as run_baseline_generation,
@@ -133,12 +173,17 @@ class TestPipeline(unittest.TestCase):
     def test_run_pipeline_continues_when_one_test_model_fails(self) -> None:
         config = self.config(("model-b", "model-c", "model-d"))
 
+        def generate_or_fail(generation_config) -> GeneratedTests:
+            model = generation_config.model
+            if model == "model-c":
+                generation_config.output_dir.mkdir(parents=True)
+                (generation_config.output_dir / "partial.txt").write_text("partial output", encoding="utf-8")
+                raise RuntimeError("model-c failed")
+            return generated_tests()
+
         with (
             patch("benchmark_pipeline.pipeline.run_baseline_generation", return_value=generated_repo()),
-            patch(
-                "benchmark_pipeline.pipeline.run_test_generation",
-                side_effect=[generated_tests(), RuntimeError("model-c failed"), generated_tests()],
-            ) as run_test_generation,
+            patch("benchmark_pipeline.pipeline.run_test_generation", side_effect=generate_or_fail) as run_test_generation,
             patch("benchmark_pipeline.pipeline.run_evaluation", return_value=[]) as run_evaluation,
             redirect_stdout(StringIO()),
         ):
@@ -147,11 +192,100 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(run_test_generation.call_count, 3)
         self.assertEqual(sorted(outcome.generated_tests), ["model-b", "model-d"])
         self.assertEqual(outcome.test_generation_errors, {"model-c": "model-c failed"})
+        self.assertFalse((config.tests_dir / "model-c").exists())
         run_evaluation.assert_called_once()
         comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
         self.assertEqual([row["test_model"] for row in comparison["rows"]], ["model-b", "model-c", "model-d"])
         self.assertEqual(comparison["rows"][1]["generation_status"], "failed")
         self.assertTrue((config.report_md.parent / "comparison_report.md").exists())
+
+    def test_comparison_report_marks_identical_mutant_sets(self) -> None:
+        config = self.config(("model-b", "model-c"))
+        model_b_outcome = evaluation_outcome(pitest_result(["mutant-1", "mutant-2"]))
+        model_c_outcome = evaluation_outcome(pitest_result(["mutant-1", "mutant-2"]))
+
+        with (
+            patch("benchmark_pipeline.pipeline.run_baseline_generation", return_value=generated_repo()),
+            patch("benchmark_pipeline.pipeline.run_test_generation", side_effect=[generated_tests(), generated_tests()]),
+            patch(
+                "benchmark_pipeline.pipeline.run_evaluation",
+                return_value=[
+                    EvaluationSuiteRun(
+                        suite_name="model-b",
+                        suite_dir=config.tests_dir / "model-b",
+                        report_json=config.report_json.parent / "model-b_report.json",
+                        report_md=config.report_md.parent / "model-b_report.md",
+                        pitest_report_dir=config.pitest_report_dir / "model-b",
+                        outcome=model_b_outcome,
+                    ),
+                    EvaluationSuiteRun(
+                        suite_name="model-c",
+                        suite_dir=config.tests_dir / "model-c",
+                        report_json=config.report_json.parent / "model-c_report.json",
+                        report_md=config.report_md.parent / "model-c_report.md",
+                        pitest_report_dir=config.pitest_report_dir / "model-c",
+                        outcome=model_c_outcome,
+                    ),
+                ],
+            ),
+            redirect_stdout(StringIO()),
+        ):
+            run_pipeline(config)
+
+        comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            comparison["mutant_set"],
+            {
+                "comparable_suite_count": 2,
+                "identical": True,
+                "common_mutants": 2,
+                "union_mutants": 2,
+                "per_suite_mutants": {"model-b": 2, "model-c": 2},
+                "only_in_suite": {"model-b": [], "model-c": []},
+            },
+        )
+        comparison_markdown = (config.report_md.parent / "comparison_report.md").read_text(encoding="utf-8")
+        self.assertIn("Identical mutant IDs across suites: `True`", comparison_markdown)
+
+    def test_comparison_report_marks_different_mutant_sets(self) -> None:
+        config = self.config(("model-b", "model-c"))
+        model_b_outcome = evaluation_outcome(pitest_result(["mutant-1", "mutant-2"]))
+        model_c_outcome = evaluation_outcome(pitest_result(["mutant-1", "mutant-3"]))
+
+        with (
+            patch("benchmark_pipeline.pipeline.run_baseline_generation", return_value=generated_repo()),
+            patch("benchmark_pipeline.pipeline.run_test_generation", side_effect=[generated_tests(), generated_tests()]),
+            patch(
+                "benchmark_pipeline.pipeline.run_evaluation",
+                return_value=[
+                    EvaluationSuiteRun(
+                        suite_name="model-b",
+                        suite_dir=config.tests_dir / "model-b",
+                        report_json=config.report_json.parent / "model-b_report.json",
+                        report_md=config.report_md.parent / "model-b_report.md",
+                        pitest_report_dir=config.pitest_report_dir / "model-b",
+                        outcome=model_b_outcome,
+                    ),
+                    EvaluationSuiteRun(
+                        suite_name="model-c",
+                        suite_dir=config.tests_dir / "model-c",
+                        report_json=config.report_json.parent / "model-c_report.json",
+                        report_md=config.report_md.parent / "model-c_report.md",
+                        pitest_report_dir=config.pitest_report_dir / "model-c",
+                        outcome=model_c_outcome,
+                    ),
+                ],
+            ),
+            redirect_stdout(StringIO()),
+        ):
+            run_pipeline(config)
+
+        comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
+        self.assertFalse(comparison["mutant_set"]["identical"])
+        self.assertEqual(comparison["mutant_set"]["common_mutants"], 1)
+        self.assertEqual(comparison["mutant_set"]["union_mutants"], 3)
+        self.assertEqual(comparison["mutant_set"]["only_in_suite"]["model-b"], ["mutant-2"])
+        self.assertEqual(comparison["mutant_set"]["only_in_suite"]["model-c"], ["mutant-3"])
 
     def test_run_pipeline_fails_when_all_test_models_fail(self) -> None:
         config = self.config(("model-b", "model-c"))

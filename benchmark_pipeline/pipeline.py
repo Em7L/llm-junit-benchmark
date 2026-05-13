@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import shutil
 from typing import Sequence
 
 from benchmark_pipeline.evaluation import EvaluationOutcome
@@ -77,11 +78,12 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     reset_directory(config.tests_dir)
     for model in config.tests_models:
         suite_name = safe_model_name(model)
+        suite_dir = config.tests_dir / suite_name
         try:
             generated_tests[model] = run_test_generation(
                 TestGenerationConfig(
                     repo_dir=config.baseline_repo,
-                    output_dir=config.tests_dir / suite_name,
+                    output_dir=suite_dir,
                     model=model,
                     manifest_path=test_manifest_path(config.tests_manifest, suite_name, len(config.tests_models) > 1),
                     max_repairs=config.max_repairs,
@@ -89,6 +91,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
             )
         except Exception as exc:
             test_generation_errors[model] = str(exc)
+            if suite_dir.exists():
+                shutil.rmtree(suite_dir, ignore_errors=True)
             print(f"[pipeline] Test generation failed for `{model}`: {exc}")
 
     if not generated_tests:
@@ -221,7 +225,47 @@ def comparison_payload(
         "repo_model": config.repo_model,
         "test_models": list(config.tests_models),
         "baseline_repo": config.baseline_repo.as_posix(),
+        "mutant_set": mutant_set_summary(evaluations),
         "rows": rows,
+    }
+
+
+def mutant_set_summary(evaluations: list[EvaluationSuiteRun]) -> dict[str, object]:
+    suite_mutants: dict[str, set[str]] = {}
+    for run in evaluations:
+        pitest = run.outcome.pitest_result
+        if pitest is None:
+            continue
+        suite_mutants[run.suite_name] = {mutation.mutant_id for mutation in pitest.mutations}
+
+    if not suite_mutants:
+        return {
+            "comparable_suite_count": 0,
+            "identical": None,
+            "common_mutants": 0,
+            "union_mutants": 0,
+            "per_suite_mutants": {},
+            "only_in_suite": {},
+        }
+
+    mutant_sets = list(suite_mutants.values())
+    common_mutants = set.intersection(*mutant_sets)
+    union_mutants = set.union(*mutant_sets)
+    first_set = mutant_sets[0]
+    identical = all(mutants == first_set for mutants in mutant_sets)
+
+    return {
+        "comparable_suite_count": len(suite_mutants),
+        "identical": identical,
+        "common_mutants": len(common_mutants),
+        "union_mutants": len(union_mutants),
+        "per_suite_mutants": {suite: len(mutants) for suite, mutants in suite_mutants.items()},
+        "only_in_suite": {
+            suite: sorted(mutants - set.union(*(other for other_suite, other in suite_mutants.items() if other_suite != suite)))
+            if len(suite_mutants) > 1
+            else []
+            for suite, mutants in suite_mutants.items()
+        },
     }
 
 
@@ -267,6 +311,22 @@ def comparison_markdown(payload: dict[str, object]) -> str:
         lines.extend(["", "## Generation Failures"])
         for row in failed_rows:
             lines.append(f"- `{row['test_model']}`: {row['error']}")
+    mutant_set = payload.get("mutant_set")
+    if isinstance(mutant_set, dict):
+        lines.extend(
+            [
+                "",
+                "## Mutant Set Consistency",
+                f"- Comparable PIT suites: `{mutant_set.get('comparable_suite_count')}`",
+                f"- Identical mutant IDs across suites: `{mutant_set.get('identical')}`",
+                f"- Common mutant IDs: `{mutant_set.get('common_mutants')}`",
+                f"- Union mutant IDs: `{mutant_set.get('union_mutants')}`",
+            ]
+        )
+        per_suite = mutant_set.get("per_suite_mutants")
+        if isinstance(per_suite, dict):
+            for suite_name, mutant_count in sorted(per_suite.items()):
+                lines.append(f"- `{suite_name}` mutant IDs: `{mutant_count}`")
     return "\n".join(lines)
 
 
