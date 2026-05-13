@@ -90,6 +90,36 @@ class TestEvaluationRunner(unittest.TestCase):
         self.assertEqual(runs[1].report_md, self.root / "reports/model-b_report.md")
         self.assertEqual(evaluate_repositories.call_count, 2)
 
+    def test_run_evaluation_uses_model_specific_report_paths_for_single_nested_suite(self) -> None:
+        baseline_repo = self.root / "repo"
+        generated_tests = self.root / "generated_tests"
+        baseline_repo.mkdir()
+        (generated_tests / "model-a/src/test/java").mkdir(parents=True)
+        config = EvaluationRunConfig(
+            baseline_repo=baseline_repo,
+            tests_dir=generated_tests,
+            report_json=self.root / "reports/evaluation_report.json",
+            report_md=self.root / "reports/evaluation_report.md",
+            pitest_report_dir=self.root / "reports/pit-reports",
+            maven_cmd=["mvn", "test"],
+        )
+
+        with (
+            patch("benchmark_pipeline.evaluation.runner.evaluate_repositories") as evaluate_repositories,
+            redirect_stdout(StringIO()),
+        ):
+            evaluate_repositories.return_value = EvaluationOutcome(
+                baseline_result=passed_maven(),
+                baseline_coverage=None,
+                pitest_result=None,
+                disabled_tests=[],
+            )
+            runs = run_evaluation(config)
+
+        self.assertEqual([run.suite_name for run in runs], ["model-a"])
+        self.assertEqual(runs[0].report_json, self.root / "reports/model-a_report.json")
+        self.assertEqual(runs[0].pitest_report_dir, self.root / "reports/pit-reports/model-a")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -48,14 +48,15 @@ def run_evaluation(config: EvaluationRunConfig) -> list[EvaluationSuiteRun]:
         raise FileNotFoundError(f"Baseline repository not found: {config.baseline_repo}")
 
     test_suites = discover_test_suites(config.tests_dir)
-    is_multi_suite = len(test_suites) > 1
+    is_direct_suite = (config.tests_dir / "src").exists() or (config.tests_dir / "pom.xml").exists()
+    use_suite_named_reports = not is_direct_suite
     runs: list[EvaluationSuiteRun] = []
 
     for suite_dir in test_suites:
-        suite_name = suite_dir.name if is_multi_suite else "evaluation"
-        report_json = config.report_json.parent / f"{suite_name}_report.json" if is_multi_suite else config.report_json
-        report_md = config.report_md.parent / f"{suite_name}_report.md" if is_multi_suite else config.report_md
-        pitest_report_dir = config.pitest_report_dir / suite_name if is_multi_suite else config.pitest_report_dir
+        suite_name = suite_dir.name if use_suite_named_reports else "evaluation"
+        report_json = config.report_json.parent / f"{suite_name}_report.json" if use_suite_named_reports else config.report_json
+        report_md = config.report_md.parent / f"{suite_name}_report.md" if use_suite_named_reports else config.report_md
+        pitest_report_dir = config.pitest_report_dir / suite_name if use_suite_named_reports else config.pitest_report_dir
 
         print_evaluation_start(config, suite_name, suite_dir)
         outcome = evaluate_repositories(

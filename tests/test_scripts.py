@@ -78,6 +78,8 @@ class TestScripts(unittest.TestCase):
             str(self.root / "baseline"),
             "--tests-dir",
             str(self.root / "tests"),
+            "--output-root",
+            str(self.root / "runs"),
             "--maven-cmd",
             "mvn",
             "verify",
@@ -94,10 +96,76 @@ class TestScripts(unittest.TestCase):
 
         config = run_pipeline.call_args.args[0]
         self.assertEqual(config.repo_model, "repo-model")
-        self.assertEqual(config.tests_model, "tests-model")
+        self.assertEqual(config.tests_models, ("tests-model",))
         self.assertEqual(config.project_name, "demo-project")
         self.assertEqual(config.maven_cmd, ["mvn", "verify"])
         self.assertEqual(config.max_repairs, 3)
+
+    def test_run_pipeline_script_uses_next_preserved_run_directory_by_default(self) -> None:
+        module = load_script("0_run_pipeline.py")
+        run_pipeline = Mock()
+        output_root = self.root / "runs"
+        existing_run = output_root / "repo-repo-model__tests-test-model" / "run-001"
+        existing_run.mkdir(parents=True)
+
+        with (
+            patch.object(module, "run_pipeline", run_pipeline),
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "0_run_pipeline.py",
+                    "--repo-model",
+                    "repo-model",
+                    "--tests-model",
+                    "test-model",
+                    "--output-root",
+                    str(output_root),
+                ],
+            ),
+            redirect_stdout(StringIO()),
+        ):
+            module.main()
+
+        config = run_pipeline.call_args.args[0]
+        expected_run = output_root / "repo-repo-model__tests-test-model" / "run-002"
+        self.assertEqual(config.baseline_repo, expected_run / "baseline_repo")
+        self.assertEqual(config.tests_dir, expected_run / "generated_tests")
+        self.assertEqual(config.report_md, expected_run / "reports/evaluation_report.md")
+
+    def test_run_pipeline_script_accepts_multiple_test_models(self) -> None:
+        module = load_script("0_run_pipeline.py")
+        run_pipeline = Mock()
+        argv = [
+            "0_run_pipeline.py",
+            "--repo-model",
+            "repo-model",
+            "--tests-models",
+            "model-b",
+            "model-c",
+            "model-d",
+            "--output-root",
+            str(self.root / "runs"),
+        ]
+
+        with (
+            patch.object(module, "run_pipeline", run_pipeline),
+            patch.object(sys, "argv", argv),
+            redirect_stdout(StringIO()),
+        ):
+            module.main()
+
+        config = run_pipeline.call_args.args[0]
+        self.assertEqual(config.repo_model, "repo-model")
+        self.assertEqual(config.tests_models, ("model-b", "model-c", "model-d"))
+
+    def test_run_group_name_is_independent_of_test_model_order(self) -> None:
+        module = load_script("0_run_pipeline.py")
+
+        self.assertEqual(
+            module.run_group_name("repo-model", ["model-b", "model-a"]),
+            module.run_group_name("repo-model", ["model-a", "model-b"]),
+        )
 
     def test_baseline_generation_script_writes_manifest(self) -> None:
         module = load_script("1_generate_baseline_repo.py")
@@ -147,23 +215,6 @@ class TestScripts(unittest.TestCase):
         self.assertEqual(config.output_dir, output_dir)
         self.assertEqual(config.manifest_path, manifest)
         self.assertEqual(config.max_repairs, 5)
-
-    def test_test_benchmark_script_delegates_to_runner(self) -> None:
-        module = load_script("2b_benchmark_tests.py")
-
-        with (
-            patch.object(module, "TEST_MODELS_LIST", ["model-a", "model-b"]),
-            patch.object(module, "run_test_generation_benchmark") as run_test_generation_benchmark,
-            patch.object(sys, "argv", ["2b_benchmark_tests.py"]),
-            redirect_stdout(StringIO()),
-        ):
-            module.main()
-
-        config = run_test_generation_benchmark.call_args.args[0]
-        self.assertEqual(config.repo_dir, Path("artifacts/baseline_repo"))
-        self.assertEqual(config.output_dir, Path("artifacts/benchmarks"))
-        self.assertEqual(config.manifest_dir, Path("artifacts/manifests/benchmarks"))
-        self.assertEqual(config.models, ["model-a", "model-b"])
 
     def test_evaluation_script_rejects_missing_artifact_directories_before_running(self) -> None:
         module = load_script("3_evaluate_with_pitest.py")

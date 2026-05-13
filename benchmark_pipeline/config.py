@@ -14,6 +14,3 @@ REPO_GEN_MODEL = os.getenv("REPO_GEN_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.4-
 
 # Model for Agent 2 (JUnit test suite generation).
 TEST_GEN_MODEL = os.getenv("TEST_GEN_MODEL", os.getenv("OPENAI_MODEL", "gpt-4o"))
-
-# Models used by the explicit multi-model benchmark script.
-TEST_MODELS_LIST = ["gpt-4o", "gpt-5.4-mini", "gpt-4o-mini"]

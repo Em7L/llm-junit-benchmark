@@ -4,23 +4,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Sequence
 
 from benchmark_pipeline.evaluation import EvaluationOutcome
-from benchmark_pipeline.evaluation.runner import EvaluationRunConfig, run_evaluation
+from benchmark_pipeline.evaluation.runner import EvaluationRunConfig, EvaluationSuiteRun, run_evaluation
 from benchmark_pipeline.generation.runner import (
     BaselineGenerationConfig,
     TestGenerationConfig,
     run_baseline_generation,
     run_test_generation,
 )
+from benchmark_pipeline.fs_utils import dump_json, reset_directory
 from benchmark_pipeline.models import GeneratedRepo, GeneratedTests
 
 
 @dataclass(frozen=True)
 class PipelineConfig:
     repo_model: str
-    tests_model: str
+    tests_models: Sequence[str]
     project_name: str
     baseline_repo: Path
     tests_dir: Path
@@ -36,16 +38,24 @@ class PipelineConfig:
 @dataclass
 class PipelineOutcome:
     generated_repo: GeneratedRepo
-    generated_tests: GeneratedTests
-    evaluation: EvaluationOutcome
+    generated_tests: dict[str, GeneratedTests]
+    test_generation_errors: dict[str, str]
+    evaluations: list[EvaluationSuiteRun]
+
+    @property
+    def evaluation(self) -> EvaluationOutcome:
+        return self.evaluations[0].outcome
 
 
 def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
+    if not config.tests_models:
+        raise ValueError("At least one test-generation model must be provided.")
+
     print()
     print("=" * 72)
     print("[pipeline] Running full benchmark pipeline")
     print(f"[pipeline] Repository model: {config.repo_model}")
-    print(f"[pipeline] Test model: {config.tests_model}")
+    print(f"[pipeline] Test models: {', '.join(config.tests_models)}")
     print("=" * 72)
 
     print_step("baseline generation")
@@ -62,19 +72,35 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     print_step_done("baseline generation")
 
     print_step("test generation")
-    generated_tests = run_test_generation(
-        TestGenerationConfig(
-            repo_dir=config.baseline_repo,
-            output_dir=config.tests_dir,
-            model=config.tests_model,
-            manifest_path=config.tests_manifest,
-            max_repairs=config.max_repairs,
+    generated_tests: dict[str, GeneratedTests] = {}
+    test_generation_errors: dict[str, str] = {}
+    reset_directory(config.tests_dir)
+    for model in config.tests_models:
+        suite_name = safe_model_name(model)
+        try:
+            generated_tests[model] = run_test_generation(
+                TestGenerationConfig(
+                    repo_dir=config.baseline_repo,
+                    output_dir=config.tests_dir / suite_name,
+                    model=model,
+                    manifest_path=test_manifest_path(config.tests_manifest, suite_name, len(config.tests_models) > 1),
+                    max_repairs=config.max_repairs,
+                )
+            )
+        except Exception as exc:
+            test_generation_errors[model] = str(exc)
+            print(f"[pipeline] Test generation failed for `{model}`: {exc}")
+
+    if not generated_tests:
+        raise RuntimeError(
+            "All test-generation models failed. "
+            "No test suites are available for evaluation.\n"
+            + "\n".join(f"- {model}: {error}" for model, error in test_generation_errors.items())
         )
-    )
     print_step_done("test generation")
 
     print_step("PIT evaluation")
-    evaluation_runs = run_evaluation(
+    evaluations = run_evaluation(
         EvaluationRunConfig(
             baseline_repo=config.baseline_repo,
             tests_dir=config.tests_dir,
@@ -84,7 +110,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
             maven_cmd=config.maven_cmd,
         )
     )
-    evaluation = evaluation_runs[0].outcome
+    write_comparison_reports(config, generated_tests, test_generation_errors, evaluations)
     print_step_done("PIT evaluation")
 
     print()
@@ -92,8 +118,164 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     return PipelineOutcome(
         generated_repo=generated_repo,
         generated_tests=generated_tests,
-        evaluation=evaluation,
+        test_generation_errors=test_generation_errors,
+        evaluations=evaluations,
     )
+
+
+def safe_model_name(model: str) -> str:
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", model.strip())
+    return safe_name or "model"
+
+
+def test_manifest_path(base_path: Path, suite_name: str, is_multi_model: bool) -> Path:
+    if base_path.suffix and not is_multi_model:
+        return base_path
+    if base_path.suffix:
+        return base_path.parent / f"{base_path.stem}_{suite_name}{base_path.suffix}"
+    return base_path / f"{suite_name}_tests.json"
+
+
+def write_comparison_reports(
+    config: PipelineConfig,
+    generated_tests: dict[str, GeneratedTests],
+    test_generation_errors: dict[str, str],
+    evaluations: list[EvaluationSuiteRun],
+) -> None:
+    payload = comparison_payload(config, generated_tests, test_generation_errors, evaluations)
+    report_json = config.report_json.parent / "comparison_report.json"
+    report_md = config.report_md.parent / "comparison_report.md"
+    print(f"[pipeline] Writing comparison JSON report to {report_json.resolve()}")
+    dump_json(report_json, payload)
+    report_md.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[pipeline] Writing comparison markdown report to {report_md.resolve()}")
+    report_md.write_text(comparison_markdown(payload), encoding="utf-8")
+
+
+def comparison_payload(
+    config: PipelineConfig,
+    generated_tests: dict[str, GeneratedTests],
+    test_generation_errors: dict[str, str],
+    evaluations: list[EvaluationSuiteRun],
+) -> dict[str, object]:
+    evaluations_by_suite = {run.suite_name: run for run in evaluations}
+    rows: list[dict[str, object]] = []
+
+    for model in config.tests_models:
+        suite_name = safe_model_name(model)
+        error = test_generation_errors.get(model)
+        if error is not None:
+            rows.append(
+                {
+                    "test_model": model,
+                    "suite_name": suite_name,
+                    "generation_status": "failed",
+                    "error": error,
+                }
+            )
+            continue
+
+        generated = generated_tests.get(model)
+        run = evaluations_by_suite.get(suite_name)
+        if run is None:
+            rows.append(
+                {
+                    "test_model": model,
+                    "suite_name": suite_name,
+                    "generation_status": "passed" if generated is not None else "missing",
+                    "evaluation_status": "missing",
+                    "generated_test_files": len(generated.files) if generated is not None else None,
+                }
+            )
+            continue
+
+        outcome = run.outcome
+        coverage = outcome.baseline_coverage
+        pitest = outcome.pitest_result
+        rows.append(
+            {
+                "test_model": model,
+                "suite_name": suite_name,
+                "generation_status": "passed",
+                "evaluation_status": outcome.baseline_result.status,
+                "generated_test_files": len(generated.files) if generated is not None else None,
+                "tests": outcome.baseline_result.tests,
+                "failures": outcome.baseline_result.failures,
+                "errors": outcome.baseline_result.errors,
+                "skipped": outcome.baseline_result.skipped,
+                "disabled_tests": len(outcome.disabled_tests),
+                "line_coverage": coverage.line_rate if coverage is not None else None,
+                "branch_coverage": coverage.branch_rate if coverage is not None else None,
+                "instruction_coverage": coverage.instruction_rate if coverage is not None else None,
+                "total_mutations": pitest.total_mutations if pitest is not None else None,
+                "killed": pitest.status_counts.get("KILLED", 0) if pitest is not None else None,
+                "survived": pitest.status_counts.get("SURVIVED", 0) if pitest is not None else None,
+                "no_coverage": pitest.status_counts.get("NO_COVERAGE", 0) if pitest is not None else None,
+                "mutation_score": pitest.mutation_score if pitest is not None else None,
+                "report_json": run.report_json.as_posix(),
+                "report_md": run.report_md.as_posix(),
+            }
+        )
+
+    return {
+        "repo_model": config.repo_model,
+        "test_models": list(config.tests_models),
+        "baseline_repo": config.baseline_repo.as_posix(),
+        "rows": rows,
+    }
+
+
+def comparison_markdown(payload: dict[str, object]) -> str:
+    rows = payload["rows"]
+    assert isinstance(rows, list)
+    lines = [
+        "# Model Comparison Report",
+        "",
+        f"- Repository model: `{payload['repo_model']}`",
+        f"- Baseline repository: `{payload['baseline_repo']}`",
+        "",
+        "| Test model | Generation | Evaluation | Tests | Skipped | Disabled | Line cov. | Branch cov. | Mutations | Killed | Survived | No coverage | Mutation score |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+
+    for row in rows:
+        assert isinstance(row, dict)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    markdown_cell(row.get("test_model")),
+                    markdown_cell(row.get("generation_status")),
+                    markdown_cell(row.get("evaluation_status")),
+                    markdown_cell(row.get("tests")),
+                    markdown_cell(row.get("skipped")),
+                    markdown_cell(row.get("disabled_tests")),
+                    percent_cell(row.get("line_coverage")),
+                    percent_cell(row.get("branch_coverage")),
+                    markdown_cell(row.get("total_mutations")),
+                    markdown_cell(row.get("killed")),
+                    markdown_cell(row.get("survived")),
+                    markdown_cell(row.get("no_coverage")),
+                    percent_cell(row.get("mutation_score")),
+                ]
+            )
+            + " |"
+        )
+
+    failed_rows = [row for row in rows if isinstance(row, dict) and row.get("error")]
+    if failed_rows:
+        lines.extend(["", "## Generation Failures"])
+        for row in failed_rows:
+            lines.append(f"- `{row['test_model']}`: {row['error']}")
+    return "\n".join(lines)
+
+
+def markdown_cell(value: object) -> str:
+    return "N/A" if value is None else str(value)
+
+
+def percent_cell(value: object) -> str:
+    return "N/A" if not isinstance(value, int | float) else f"{value:.2%}"
 
 
 def print_step(label: str) -> None:

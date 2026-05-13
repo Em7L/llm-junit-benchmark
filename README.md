@@ -46,10 +46,23 @@ Run the complete workflow with the default models from `.env` or `benchmark_pipe
 python 0_run_pipeline.py
 ```
 
+By default, each full pipeline run is preserved under a new run directory:
+
+```text
+artifacts/runs/repo-<repo-model>__tests-<test-models>/run-001/
+artifacts/runs/repo-<repo-model>__tests-<test-models>/run-002/
+```
+
 Run with explicit models:
 
 ```powershell
 python 0_run_pipeline.py --repo-model gpt-5.4-mini --tests-model gpt-4o
+```
+
+Run the intended model-comparison workflow with one baseline generator and multiple test-suite generators:
+
+```powershell
+python 0_run_pipeline.py --repo-model gpt-5.4-mini --tests-models gpt-4o gpt-5.4-mini gpt-4o-mini
 ```
 
 The full pipeline does the following:
@@ -58,10 +71,10 @@ The full pipeline does the following:
 2. Validates the generated repository structure.
 3. Runs Maven to verify that the baseline repository builds.
 4. Attempts to repair the baseline repository up to `--max-repairs` times if needed.
-5. Generates a JUnit 5 test suite for the verified baseline repository.
-6. Runs the generated tests against the baseline.
+5. Generates one JUnit 5 test suite per test model for the same verified baseline repository.
+6. Runs each generated test suite against the same baseline.
 7. Disables generated test methods that fail against the baseline, because the baseline is treated as the reference implementation for the experiment.
-8. Runs JaCoCo coverage and PIT mutation testing on the cleaned test suite.
+8. Runs JaCoCo coverage and PIT mutation testing on each cleaned test suite.
 9. Writes JSON, Markdown, and PIT reports under `artifacts/reports`.
 
 ## Run Individual Steps
@@ -90,41 +103,30 @@ The default paths are:
 - Generated tests: `artifacts/generated_tests`
 - Reports: `artifacts/reports`
 
-## Benchmark Multiple Test Models
+## Compare Multiple Test Models
 
-After generating a baseline repository, generate separate test suites for multiple models:
-
-```powershell
-python 2b_benchmark_tests.py
-```
-
-This uses `TEST_MODELS_LIST` from `benchmark_pipeline/config.py` and writes one generated test suite per model under:
+Use `0_run_pipeline.py --tests-models ...` for the main experiment. The pipeline generates one baseline repository and then creates one generated test suite per test model under:
 
 ```text
-artifacts/benchmarks/<model-name>/
+artifacts/generated_tests/<model-name>/
 ```
 
-Then evaluate all benchmark suites:
-
-```powershell
-python 3_evaluate_with_pitest.py --tests-dir artifacts/benchmarks
-```
-
-This compares the generated suites against the same baseline repository under the same evaluation procedure.
+Evaluation then compares all generated suites against the same baseline repository under the same Maven, JaCoCo, and PIT procedure.
 
 ## Outputs
 
 The main generated files and folders are:
 
-- `artifacts/baseline_repo/`: generated Java Maven repository
-- `artifacts/generated_tests/`: generated JUnit 5 tests for the default single-suite workflow
-- `artifacts/benchmarks/`: generated test suites for the multi-model benchmark workflow
-- `artifacts/manifests/`: structured LLM responses saved as JSON
-- `artifacts/reports/evaluation_report.json`: machine-readable evaluation report
-- `artifacts/reports/evaluation_report.md`: human-readable evaluation report
-- `artifacts/reports/pit-reports/`: copied PIT XML/HTML reports
+- `artifacts/runs/<model-combination>/run-N/baseline_repo/`: generated Java Maven repository
+- `artifacts/runs/<model-combination>/run-N/generated_tests/<model-name>/`: generated JUnit 5 tests for each test model
+- `artifacts/runs/<model-combination>/run-N/manifests/`: structured LLM responses saved as JSON
+- `artifacts/runs/<model-combination>/run-N/reports/<model-name>_report.json`: machine-readable per-model evaluation report
+- `artifacts/runs/<model-combination>/run-N/reports/<model-name>_report.md`: human-readable per-model evaluation report
+- `artifacts/runs/<model-combination>/run-N/reports/comparison_report.json`: machine-readable comparison report
+- `artifacts/runs/<model-combination>/run-N/reports/comparison_report.md`: Markdown comparison table across test models
+- `artifacts/runs/<model-combination>/run-N/reports/pit-reports/`: copied PIT XML/HTML reports
 
-Temporary staged repositories are created under `artifacts/.staging/` during evaluation and can be deleted after a run.
+Temporary staged repositories are created under each run directory's `.staging/` folder during evaluation and can be deleted after a run.
 
 ## Evaluation Behavior
 
@@ -151,7 +153,7 @@ python -m ruff check .
 Compile-check the Python files:
 
 ```powershell
-python -m compileall 0_run_pipeline.py 1_generate_baseline_repo.py 2_generate_tests.py 2b_benchmark_tests.py 3_evaluate_with_pitest.py benchmark_pipeline tests
+python -m compileall 0_run_pipeline.py 1_generate_baseline_repo.py 2_generate_tests.py 3_evaluate_with_pitest.py benchmark_pipeline tests
 ```
 
 ## Notes
