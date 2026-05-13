@@ -25,6 +25,16 @@ class GeneratedTests(BaseModel):
 
 
 @dataclass
+class RepairLog:
+    """Tracks first-attempt vs post-repair outcomes for RQ1 analysis."""
+
+    first_attempt_valid: bool
+    first_attempt_status: str
+    repairs_attempted: int
+    final_status: str
+
+
+@dataclass
 class MavenResult:
     label: str
     exit_code: int

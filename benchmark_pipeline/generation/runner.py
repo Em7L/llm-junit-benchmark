@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Sequence
 
 from benchmark_pipeline.fs_utils import dump_json
-from benchmark_pipeline.models import GeneratedRepo, GeneratedTests
+from benchmark_pipeline.models import GeneratedRepo, GeneratedTests, RepairLog
 from benchmark_pipeline.generation.repo_generation import generate_verified_repo
 from benchmark_pipeline.generation.tests_generation import generate_tests
 
@@ -20,6 +20,7 @@ class BaselineGenerationConfig:
     manifest_path: Path
     verify_cmd: Sequence[str]
     max_repairs: int
+    domain: str | None = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ def run_baseline_generation(config: BaselineGenerationConfig) -> GeneratedRepo:
         output_dir=config.output_dir,
         max_repairs=config.max_repairs,
         verify_cmd=list(config.verify_cmd),
+        domain=config.domain,
     )
     print(f"[baseline] Writing manifest to {config.manifest_path.resolve()}")
     dump_json(config.manifest_path, parsed.model_dump())
@@ -51,15 +53,23 @@ def run_baseline_generation(config: BaselineGenerationConfig) -> GeneratedRepo:
     return parsed
 
 
-def run_test_generation(config: TestGenerationConfig) -> GeneratedTests:
-    parsed = generate_tests(
+def run_test_generation(config: TestGenerationConfig) -> tuple[GeneratedTests, RepairLog]:
+    parsed, repair_log = generate_tests(
         repo_dir=config.repo_dir,
         output_dir=config.output_dir,
         model=config.model,
         max_repairs=config.max_repairs,
     )
+    manifest_data = parsed.model_dump()
+    manifest_data["repair_log"] = {
+        "first_attempt_valid": repair_log.first_attempt_valid,
+        "first_attempt_status": repair_log.first_attempt_status,
+        "repairs_attempted": repair_log.repairs_attempted,
+        "final_status": repair_log.final_status,
+    }
     print(f"[tests] Writing manifest to {config.manifest_path.resolve()}")
-    dump_json(config.manifest_path, parsed.model_dump())
+    dump_json(config.manifest_path, manifest_data)
+    print(f"[tests] First-attempt valid: {repair_log.first_attempt_valid} | Repairs attempted: {repair_log.repairs_attempted}")
     print()
     print(f"Generated test suite at {config.output_dir.resolve()}")
-    return parsed
+    return parsed, repair_log
