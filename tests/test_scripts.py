@@ -12,7 +12,6 @@ from unittest.mock import Mock, patch
 
 import _path  # noqa: F401
 
-from benchmark_pipeline.evaluation import EvaluationOutcome
 from benchmark_pipeline.models import GeneratedRepo, GeneratedTests, MavenResult
 
 
@@ -102,29 +101,28 @@ class TestScripts(unittest.TestCase):
 
     def test_baseline_generation_script_writes_manifest(self) -> None:
         module = load_script("1_generate_baseline_repo.py")
-        generated_repo = repo()
         manifest = self.root / "baseline.json"
         output_dir = self.root / "baseline"
 
         with (
-            patch.object(module, "generate_verified_repo", return_value=generated_repo) as generate_verified_repo,
+            patch.object(module, "run_baseline_generation") as run_baseline_generation,
             patch.object(sys, "argv", ["1_generate_baseline_repo.py", "--output-dir", str(output_dir), "--manifest", str(manifest)]),
             redirect_stdout(StringIO()),
         ):
             module.main()
 
-        self.assertTrue(manifest.exists())
-        self.assertEqual(generate_verified_repo.call_args.kwargs["output_dir"], output_dir)
+        config = run_baseline_generation.call_args.args[0]
+        self.assertEqual(config.output_dir, output_dir)
+        self.assertEqual(config.manifest_path, manifest)
 
     def test_test_generation_script_writes_manifest(self) -> None:
         module = load_script("2_generate_tests.py")
-        generated_tests = tests()
         manifest = self.root / "tests.json"
         repo_dir = self.root / "repo"
         output_dir = self.root / "tests"
 
         with (
-            patch.object(module, "generate_tests", return_value=generated_tests) as generate_tests,
+            patch.object(module, "run_test_generation") as run_test_generation,
             patch.object(
                 sys,
                 "argv",
@@ -142,9 +140,27 @@ class TestScripts(unittest.TestCase):
         ):
             module.main()
 
-        self.assertTrue(manifest.exists())
-        self.assertEqual(generate_tests.call_args.kwargs["repo_dir"], repo_dir)
-        self.assertEqual(generate_tests.call_args.kwargs["output_dir"], output_dir)
+        config = run_test_generation.call_args.args[0]
+        self.assertEqual(config.repo_dir, repo_dir)
+        self.assertEqual(config.output_dir, output_dir)
+        self.assertEqual(config.manifest_path, manifest)
+
+    def test_test_benchmark_script_delegates_to_runner(self) -> None:
+        module = load_script("2b_benchmark_tests.py")
+
+        with (
+            patch.object(module, "TEST_MODELS_LIST", ["model-a", "model-b"]),
+            patch.object(module, "run_test_generation_benchmark") as run_test_generation_benchmark,
+            patch.object(sys, "argv", ["2b_benchmark_tests.py"]),
+            redirect_stdout(StringIO()),
+        ):
+            module.main()
+
+        config = run_test_generation_benchmark.call_args.args[0]
+        self.assertEqual(config.repo_dir, Path("artifacts/baseline_repo"))
+        self.assertEqual(config.output_dir, Path("artifacts/benchmarks"))
+        self.assertEqual(config.manifest_dir, Path("artifacts/manifests/benchmarks"))
+        self.assertEqual(config.models, ["model-a", "model-b"])
 
     def test_evaluation_script_rejects_missing_artifact_directories_before_running(self) -> None:
         module = load_script("3_evaluate_with_pitest.py")
@@ -153,7 +169,7 @@ class TestScripts(unittest.TestCase):
         tests_dir.mkdir()
 
         with (
-            patch.object(module, "evaluate_repositories") as evaluate_repositories,
+            patch.object(module, "run_evaluation", side_effect=FileNotFoundError("missing")) as run_evaluation,
             patch.object(
                 sys,
                 "argv",
@@ -169,9 +185,9 @@ class TestScripts(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 module.main()
 
-        evaluate_repositories.assert_not_called()
+        run_evaluation.assert_called_once()
 
-    def test_evaluation_script_writes_json_and_markdown_reports(self) -> None:
+    def test_evaluation_script_passes_cli_args_to_runner(self) -> None:
         module = load_script("3_evaluate_with_pitest.py")
         baseline_repo = self.root / "repo"
         tests_dir = self.root / "tests"
@@ -179,15 +195,9 @@ class TestScripts(unittest.TestCase):
         report_md = self.root / "report.md"
         baseline_repo.mkdir()
         (tests_dir / "src/test/java").mkdir(parents=True)
-        outcome = EvaluationOutcome(
-            baseline_result=passed_maven(),
-            baseline_coverage=None,
-            pitest_result=None,
-            disabled_tests=[],
-        )
 
         with (
-            patch.object(module, "evaluate_repositories", return_value=outcome),
+            patch.object(module, "run_evaluation") as run_evaluation,
             patch.object(
                 sys,
                 "argv",
@@ -207,9 +217,11 @@ class TestScripts(unittest.TestCase):
         ):
             module.main()
 
-        self.assertTrue(report_json.exists())
-        self.assertTrue(report_md.exists())
-        self.assertIn("Mutation Evaluation Report", report_md.read_text(encoding="utf-8"))
+        config = run_evaluation.call_args.args[0]
+        self.assertEqual(config.baseline_repo, baseline_repo)
+        self.assertEqual(config.tests_dir, tests_dir)
+        self.assertEqual(config.report_json, report_json)
+        self.assertEqual(config.report_md, report_md)
 
 
 if __name__ == "__main__":

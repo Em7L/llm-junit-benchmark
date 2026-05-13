@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 import _path  # noqa: F401
 
-from benchmark_pipeline.llm import parse_structured_response
+from benchmark_pipeline.tools.llm import parse_structured_response
 from benchmark_pipeline.models import GeneratedTests
 
 
@@ -28,7 +28,7 @@ class TestLlmStructuredResponse(unittest.TestCase):
             )
         )
 
-        with patch("benchmark_pipeline.llm.get_client", return_value=client):
+        with patch("benchmark_pipeline.tools.llm.get_client", return_value=client):
             result = parse_structured_response(
                 model="test-model",
                 schema=GeneratedTests,
@@ -60,7 +60,7 @@ class TestLlmStructuredResponse(unittest.TestCase):
             )
         )
 
-        with patch("benchmark_pipeline.llm.get_client", return_value=client):
+        with patch("benchmark_pipeline.tools.llm.get_client", return_value=client):
             with self.assertRaisesRegex(RuntimeError, "structured output"):
                 parse_structured_response(
                     model="test-model",

@@ -5,7 +5,7 @@ import unittest
 import _path  # noqa: F401
 
 from benchmark_pipeline.models import FileArtifact, GeneratedRepo, GeneratedTests
-from benchmark_pipeline.validation import (
+from benchmark_pipeline.generation.validation import (
     OutputValidationError,
     validate_generated_repo,
     validate_generated_tests,

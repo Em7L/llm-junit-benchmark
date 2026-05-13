@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 import xml.etree.ElementTree as ET
 
-from benchmark_pipeline.maven import run_maven_command
+from benchmark_pipeline.tools.maven import run_maven_command
 from benchmark_pipeline.models import PitestMutation, PitestResult
 
 

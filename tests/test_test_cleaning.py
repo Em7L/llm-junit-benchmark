@@ -6,7 +6,7 @@ from pathlib import Path
 
 import _path  # noqa: F401
 
-from benchmark_pipeline.test_cleaning import disable_baseline_failing_tests
+from benchmark_pipeline.evaluation.test_cleaning import disable_baseline_failing_tests
 
 
 class TestTestCleaning(unittest.TestCase):

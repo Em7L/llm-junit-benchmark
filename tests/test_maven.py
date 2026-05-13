@@ -6,7 +6,7 @@ from pathlib import Path
 
 import _path  # noqa: F401
 
-from benchmark_pipeline.maven import (
+from benchmark_pipeline.tools.maven import (
     classify_maven_result,
     parse_jacoco_report,
     parse_surefire_failing_tests,

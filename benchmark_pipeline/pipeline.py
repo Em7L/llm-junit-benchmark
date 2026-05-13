@@ -9,9 +9,9 @@ from typing import Sequence
 from benchmark_pipeline.evaluation import EvaluationOutcome, evaluate_repositories, write_evaluation_json
 from benchmark_pipeline.fs_utils import dump_json
 from benchmark_pipeline.models import GeneratedRepo, GeneratedTests
-from benchmark_pipeline.repo_generation import generate_verified_repo
-from benchmark_pipeline.reports import markdown_report
-from benchmark_pipeline.tests_generation import generate_tests
+from benchmark_pipeline.generation.repo_generation import generate_verified_repo
+from benchmark_pipeline.evaluation.reports import markdown_report
+from benchmark_pipeline.generation.tests_generation import generate_tests
 
 
 @dataclass(frozen=True)

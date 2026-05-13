@@ -5,7 +5,7 @@ import unittest
 import _path  # noqa: F401
 
 from benchmark_pipeline.models import MavenResult
-from benchmark_pipeline.reports import markdown_report
+from benchmark_pipeline.evaluation.reports import markdown_report
 
 
 def maven_result(status: str, failing_tests: list[str] | None = None) -> MavenResult:

@@ -55,14 +55,14 @@ class TestEvaluation(unittest.TestCase):
 
         with (
             patch(
-                "benchmark_pipeline.evaluation.run_maven_tests",
+                "benchmark_pipeline.evaluation.core.run_maven_tests",
                 side_effect=[
                     maven_result("test_failures", ["com.example.AppTest#failsOnBaseline"]),
                     maven_result("passed"),
                 ],
             ) as run_maven_tests,
-            patch("benchmark_pipeline.evaluation.run_pitest", return_value=pitest_result) as run_pitest,
-            patch("benchmark_pipeline.evaluation.run_maven_command"),
+            patch("benchmark_pipeline.evaluation.core.run_pitest", return_value=pitest_result) as run_pitest,
+            patch("benchmark_pipeline.evaluation.core.run_maven_command"),
         ):
             outcome = evaluate_repositories(
                 baseline_repo=self.repo,
@@ -79,11 +79,11 @@ class TestEvaluation(unittest.TestCase):
     def test_skips_cleanup_and_pitest_when_tests_do_not_compile(self) -> None:
         with (
             patch(
-                "benchmark_pipeline.evaluation.run_maven_tests",
+                "benchmark_pipeline.evaluation.core.run_maven_tests",
                 return_value=maven_result("test_compile_failure"),
             ) as run_maven_tests,
-            patch("benchmark_pipeline.evaluation.run_pitest") as run_pitest,
-            patch("benchmark_pipeline.evaluation.run_maven_command"),
+            patch("benchmark_pipeline.evaluation.core.run_pitest") as run_pitest,
+            patch("benchmark_pipeline.evaluation.core.run_maven_command"),
         ):
             outcome = evaluate_repositories(
                 baseline_repo=self.repo,

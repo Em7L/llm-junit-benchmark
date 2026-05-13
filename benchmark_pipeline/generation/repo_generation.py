@@ -5,11 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from benchmark_pipeline.fs_utils import reset_directory, write_artifacts
-from benchmark_pipeline.llm import parse_structured_response
-from benchmark_pipeline.maven import run_maven_tests
+from benchmark_pipeline.tools.llm import parse_structured_response
+from benchmark_pipeline.tools.maven import run_maven_tests
 from benchmark_pipeline.models import GeneratedRepo
-from benchmark_pipeline.prompts import build_repo_prompt, build_repo_repair_prompt
-from benchmark_pipeline.validation import OutputValidationError, validate_generated_repo
+from benchmark_pipeline.generation.prompts import build_repo_prompt, build_repo_repair_prompt
+from benchmark_pipeline.generation.validation import OutputValidationError, validate_generated_repo
 
 
 def generate_verified_repo(

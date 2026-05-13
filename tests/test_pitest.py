@@ -6,7 +6,7 @@ from pathlib import Path
 
 import _path  # noqa: F401
 
-from benchmark_pipeline.pitest import calculate_mutation_score, parse_pitest_mutations
+from benchmark_pipeline.tools.pitest import calculate_mutation_score, parse_pitest_mutations
 
 
 class TestPitestParsing(unittest.TestCase):

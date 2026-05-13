@@ -6,11 +6,11 @@ from pathlib import Path
 import shutil
 
 from benchmark_pipeline.fs_utils import reset_directory, write_artifacts, stage_repo_with_tests
-from benchmark_pipeline.llm import parse_structured_response
-from benchmark_pipeline.maven import run_maven_tests
+from benchmark_pipeline.tools.llm import parse_structured_response
+from benchmark_pipeline.tools.maven import run_maven_tests
 from benchmark_pipeline.models import GeneratedTests
-from benchmark_pipeline.prompts import build_test_prompt, build_test_repair_prompt
-from benchmark_pipeline.validation import OutputValidationError, validate_generated_tests
+from benchmark_pipeline.generation.prompts import build_test_prompt, build_test_repair_prompt
+from benchmark_pipeline.generation.validation import OutputValidationError, validate_generated_tests
 
 
 def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs: int = 2, maven_cmd: list[str] | None = None) -> GeneratedTests:

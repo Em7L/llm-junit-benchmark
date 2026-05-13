@@ -8,11 +8,11 @@ import shutil
 from typing import Sequence
 
 from benchmark_pipeline.fs_utils import dump_json, stage_repo_with_tests
-from benchmark_pipeline.maven import parse_jacoco_report, run_maven_command, run_maven_tests
+from benchmark_pipeline.tools.maven import parse_jacoco_report, run_maven_command, run_maven_tests
 from benchmark_pipeline.models import JacocoCoverage, MavenResult, PitestResult
-from benchmark_pipeline.pitest import persist_pitest_reports, run_pitest
-from benchmark_pipeline.reports import as_serializable_coverage, as_serializable_maven_result, as_serializable_pitest_result
-from benchmark_pipeline.test_cleaning import disable_baseline_failing_tests
+from benchmark_pipeline.tools.pitest import persist_pitest_reports, run_pitest
+from benchmark_pipeline.evaluation.reports import as_serializable_coverage, as_serializable_maven_result, as_serializable_pitest_result
+from benchmark_pipeline.evaluation.test_cleaning import disable_baseline_failing_tests
 
 
 @dataclass

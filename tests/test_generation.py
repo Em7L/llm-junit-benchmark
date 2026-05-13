@@ -10,8 +10,8 @@ from unittest.mock import patch
 import _path  # noqa: F401
 
 from benchmark_pipeline.models import FileArtifact, GeneratedRepo, GeneratedTests, MavenResult
-from benchmark_pipeline.repo_generation import generate_verified_repo
-from benchmark_pipeline.tests_generation import generate_tests
+from benchmark_pipeline.generation.repo_generation import generate_verified_repo
+from benchmark_pipeline.generation.tests_generation import generate_tests
 
 
 def passed_maven_result() -> MavenResult:
@@ -84,8 +84,8 @@ class TestGenerationOrchestration(unittest.TestCase):
         )
 
         with (
-            patch("benchmark_pipeline.tests_generation.parse_structured_response", return_value=generated),
-            patch("benchmark_pipeline.tests_generation.run_maven_tests", return_value=passed_maven_result()),
+            patch("benchmark_pipeline.generation.tests_generation.parse_structured_response", return_value=generated),
+            patch("benchmark_pipeline.generation.tests_generation.run_maven_tests", return_value=passed_maven_result()),
             redirect_stdout(StringIO()),
         ):
             result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model")
@@ -114,7 +114,7 @@ class TestGenerationOrchestration(unittest.TestCase):
         )
 
         with (
-            patch("benchmark_pipeline.tests_generation.parse_structured_response", return_value=generated),
+            patch("benchmark_pipeline.generation.tests_generation.parse_structured_response", return_value=generated),
             redirect_stdout(StringIO()),
         ):
             with self.assertRaisesRegex(RuntimeError, "failed semantic validation after repair attempts"):
@@ -147,8 +147,8 @@ class TestGenerationOrchestration(unittest.TestCase):
         )
 
         with (
-            patch("benchmark_pipeline.tests_generation.parse_structured_response", side_effect=[invalid, repaired]) as parse,
-            patch("benchmark_pipeline.tests_generation.run_maven_tests", return_value=passed_maven_result()) as run_maven_tests,
+            patch("benchmark_pipeline.generation.tests_generation.parse_structured_response", side_effect=[invalid, repaired]) as parse,
+            patch("benchmark_pipeline.generation.tests_generation.run_maven_tests", return_value=passed_maven_result()) as run_maven_tests,
             redirect_stdout(StringIO()),
         ):
             result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=1)
@@ -173,8 +173,8 @@ class TestGenerationOrchestration(unittest.TestCase):
         )
 
         with (
-            patch("benchmark_pipeline.tests_generation.parse_structured_response", return_value=invalid) as parse,
-            patch("benchmark_pipeline.tests_generation.run_maven_tests") as run_maven_tests,
+            patch("benchmark_pipeline.generation.tests_generation.parse_structured_response", return_value=invalid) as parse,
+            patch("benchmark_pipeline.generation.tests_generation.run_maven_tests") as run_maven_tests,
             redirect_stdout(StringIO()),
         ):
             with self.assertRaisesRegex(RuntimeError, "failed semantic validation after repair attempts"):
@@ -202,8 +202,8 @@ class TestGenerationOrchestration(unittest.TestCase):
         )
 
         with (
-            patch("benchmark_pipeline.tests_generation.parse_structured_response", side_effect=[broken, repaired]) as parse,
-            patch("benchmark_pipeline.tests_generation.run_maven_tests", side_effect=[failed_maven_result(), passed_maven_result()]) as run_maven_tests,
+            patch("benchmark_pipeline.generation.tests_generation.parse_structured_response", side_effect=[broken, repaired]) as parse,
+            patch("benchmark_pipeline.generation.tests_generation.run_maven_tests", side_effect=[failed_maven_result(), passed_maven_result()]) as run_maven_tests,
             redirect_stdout(StringIO()),
         ):
             result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=1)
@@ -218,8 +218,8 @@ class TestGenerationOrchestration(unittest.TestCase):
         repaired = valid_repo("repaired")
 
         with (
-            patch("benchmark_pipeline.repo_generation.parse_structured_response", side_effect=[broken, repaired]) as parse,
-            patch("benchmark_pipeline.repo_generation.run_maven_tests", side_effect=[failed_maven_result(), passed_maven_result()]),
+            patch("benchmark_pipeline.generation.repo_generation.parse_structured_response", side_effect=[broken, repaired]) as parse,
+            patch("benchmark_pipeline.generation.repo_generation.run_maven_tests", side_effect=[failed_maven_result(), passed_maven_result()]),
             redirect_stdout(StringIO()),
         ):
             result = generate_verified_repo(
@@ -247,8 +247,8 @@ class TestGenerationOrchestration(unittest.TestCase):
         repaired = valid_repo("repaired")
 
         with (
-            patch("benchmark_pipeline.repo_generation.parse_structured_response", side_effect=[invalid, repaired]) as parse,
-            patch("benchmark_pipeline.repo_generation.run_maven_tests", return_value=passed_maven_result()) as run_maven_tests,
+            patch("benchmark_pipeline.generation.repo_generation.parse_structured_response", side_effect=[invalid, repaired]) as parse,
+            patch("benchmark_pipeline.generation.repo_generation.run_maven_tests", return_value=passed_maven_result()) as run_maven_tests,
             redirect_stdout(StringIO()),
         ):
             result = generate_verified_repo(
@@ -267,8 +267,8 @@ class TestGenerationOrchestration(unittest.TestCase):
         output_dir = self.root / "repo"
 
         with (
-            patch("benchmark_pipeline.repo_generation.parse_structured_response", return_value=valid_repo()),
-            patch("benchmark_pipeline.repo_generation.run_maven_tests", return_value=failed_maven_result()),
+            patch("benchmark_pipeline.generation.repo_generation.parse_structured_response", return_value=valid_repo()),
+            patch("benchmark_pipeline.generation.repo_generation.run_maven_tests", return_value=failed_maven_result()),
             redirect_stdout(StringIO()),
         ):
             with self.assertRaisesRegex(RuntimeError, "failed verification after repair attempts"):
@@ -292,8 +292,8 @@ class TestGenerationOrchestration(unittest.TestCase):
         )
 
         with (
-            patch("benchmark_pipeline.repo_generation.parse_structured_response", return_value=invalid) as parse,
-            patch("benchmark_pipeline.repo_generation.run_maven_tests") as run_maven_tests,
+            patch("benchmark_pipeline.generation.repo_generation.parse_structured_response", return_value=invalid) as parse,
+            patch("benchmark_pipeline.generation.repo_generation.run_maven_tests") as run_maven_tests,
             redirect_stdout(StringIO()),
         ):
             with self.assertRaisesRegex(RuntimeError, "failed semantic validation after repair attempts"):

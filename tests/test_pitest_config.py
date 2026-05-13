@@ -7,7 +7,7 @@ from pathlib import Path
 
 import _path  # noqa: F401
 
-from benchmark_pipeline.pitest import (
+from benchmark_pipeline.tools.pitest import (
     PITEST_JUNIT5_PLUGIN_VERSION,
     PITEST_MAVEN_VERSION,
     configure_pitest_plugin,

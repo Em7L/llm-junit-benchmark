@@ -6,8 +6,7 @@ import argparse
 from pathlib import Path
 
 from benchmark_pipeline.config import REPO_GEN_MODEL
-from benchmark_pipeline.fs_utils import dump_json
-from benchmark_pipeline.repo_generation import generate_verified_repo
+from benchmark_pipeline.generation.runner import BaselineGenerationConfig, run_baseline_generation
 
 
 def main() -> None:
@@ -21,23 +20,16 @@ def main() -> None:
     parser.add_argument("--max-repairs", type=int, default=2, help="Maximum number of repair attempts after the initial generation.")
     args = parser.parse_args()
 
-    output_dir = Path(args.output_dir)
-    print()
-    print("-" * 72)
-    print("[baseline] Baseline repository generation")
-    print("-" * 72)
-    print(f"[baseline] Output directory: {output_dir.resolve()}")
-    parsed = generate_verified_repo(
-        model=args.model,
-        project_name=args.project_name,
-        output_dir=output_dir,
-        max_repairs=args.max_repairs,
-        verify_cmd=args.verify_cmd,
+    run_baseline_generation(
+        BaselineGenerationConfig(
+            model=args.model,
+            project_name=args.project_name,
+            output_dir=Path(args.output_dir),
+            manifest_path=Path(args.manifest),
+            verify_cmd=args.verify_cmd,
+            max_repairs=args.max_repairs,
+        )
     )
-    print(f"[baseline] Writing manifest to {Path(args.manifest).resolve()}")
-    dump_json(Path(args.manifest), parsed.model_dump())
-    print()
-    print(f"Generated baseline repository at {output_dir.resolve()}")
 
 
 if __name__ == "__main__":
