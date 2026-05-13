@@ -8,22 +8,71 @@ from pathlib import Path
 from benchmark_pipeline.fs_utils import repo_snapshot, tree_listing
 
 
-def build_repo_prompt(project_name: str | None = None) -> str:
+BENCHMARK_DOMAINS: list[str] = [
+    "grade-book",
+    "recipe-scaler",
+    "library-catalog",
+    "budget-tracker",
+    "payroll-calculator",
+    "inventory-manager",
+    "weather-analyzer",
+    "quiz-engine",
+    "fitness-planner",
+    "hotel-reservation",
+]
+
+
+def build_repo_prompt(project_name: str | None = None, domain: str | None = None) -> str:
     explicit_name = project_name or "generated-java-app"
+    if domain:
+        domain_instruction = f"- The application domain MUST be: {domain}."
+    else:
+        domain_instruction = "- Choose the application domain yourself."
     return textwrap.dedent(
         f"""
         Build a complete, small Maven repository for JDK 21.
 
-        Requirements:
-        - Educational Java app with moderate complexity.
-        - Choose the application domain yourself.
+        Application domain:
+        {domain_instruction}
+        - Suggested project name: `{explicit_name}`. Adjust it if a better name matches the chosen domain.
+
+        Structural requirements:
         - Use 6-10 production classes under a coherent domain model.
         - The app should include orchestration logic plus focused helper/domain classes.
+        - Include at least one service/orchestrator class that calls methods from at least 3 other classes.
+        - Include at least one method that returns different results based on state built from prior method calls.
         - Maven project with `pom.xml`.
         - Java source under `src/main/java`.
         - Include JUnit 5, Maven Surefire, JaCoCo, and Maven Exec plugin config in `pom.xml`, but do not include any tests.
+        - Use JaCoCo Maven plugin version `0.8.12` (required for JDK 21 compatibility).
+        - Use Maven Surefire plugin version `3.5.2`.
         - JaCoCo should generate XML coverage output during `mvn test`.
         - Configure the Maven Exec plugin so the app can be run with `mvn exec:java`.
+
+        Complexity targets:
+        - Total production lines of code (excluding blanks and comments): 300-500.
+        - At least 15 public methods across all classes.
+        - At least 3 methods with cyclomatic complexity >= 4 (multiple nested if/else, switch cases, or loop + condition combos).
+        - Include at least one collection-based workflow (iteration, filtering, aggregation).
+        - Include at least one formatter/parser/translator style class and one rule/validation class.
+        - Include at least one edge-case-heavy method with 3 or more meaningful scenarios.
+
+        Mutation-testing-friendly patterns (important):
+        - Include at least 3 methods with arithmetic or relational operators in non-trivial expressions (e.g., price * quantity - discount, not just getters).
+        - Include at least 2 methods with boundary checks (e.g., if (value <= 0), if (list.isEmpty())).
+        - Include at least 1 method with a multi-condition boolean expression (e.g., if (a > 0 && b != null && c.contains(x))).
+        - Include meaningful branching and validation logic throughout the codebase.
+        - Avoid trivial getters/setters that only return or assign a field.
+        - Avoid trivial wrappers whose only purpose is to inflate class count.
+
+        Anti-patterns to avoid:
+        - Do not use `System.exit()`.
+        - Do not use static mutable state (static fields that change at runtime).
+        - Do not use `Random` or any non-deterministic source.
+        - Do not use deep inheritance hierarchies (max 2 levels).
+        - Avoid external services, databases, files, sockets, threads, or frameworks.
+
+        Consistency and compilation:
         - Keep the code understandable enough that another agent can infer expected behavior and write tests.
         - The repository must compile on JDK 21.
         - The repository must pass `mvn test` with zero failing tests.
@@ -32,15 +81,10 @@ def build_repo_prompt(project_name: str | None = None) -> str:
         - Use package names and filenames consistent with the project.
         - Ensure every package declaration matches its file path.
         - Prefer deterministic logic over IO-heavy code.
-        - Include meaningful branching and validation logic.
-        - Include at least one collection-based workflow.
-        - Include at least one formatter/parser/translator style class and one rule/validation class.
-        - Include at least one edge-case-heavy method with 3 or more meaningful scenarios.
-        - Avoid trivial wrappers whose only purpose is to inflate class count.
-        - Avoid external services, databases, files, sockets, threads, or frameworks.
-        - You may pick any suitable domain.
-        - Include a short `README.md`.
-        - Suggested project name: `{explicit_name}`. Adjust it if a better name matches the chosen domain.
+
+        Documentation:
+        - Include a `README.md` with a short project description.
+        - At the end of `README.md`, include a section called "## Complexity Summary" listing: number of classes, total public methods, methods with >= 3 branches, and a one-line description of each class.
         """
     ).strip()
 

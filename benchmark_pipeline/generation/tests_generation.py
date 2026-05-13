@@ -8,7 +8,7 @@ import shutil
 from benchmark_pipeline.fs_utils import reset_directory, write_artifacts, stage_repo_with_tests
 from benchmark_pipeline.tools.llm import parse_structured_response
 from benchmark_pipeline.tools.maven import run_maven_tests
-from benchmark_pipeline.models import GeneratedTests
+from benchmark_pipeline.models import GeneratedTests, RepairLog
 from benchmark_pipeline.generation.prompts import build_test_prompt, build_test_repair_prompt
 from benchmark_pipeline.generation.validation import OutputValidationError, validate_generated_tests
 
@@ -28,7 +28,7 @@ def validate_repair_did_not_drop_suite(previous: GeneratedTests, repaired: Gener
         )
 
 
-def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs: int = 2, maven_cmd: list[str] | None = None) -> GeneratedTests:
+def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs: int = 2, maven_cmd: list[str] | None = None) -> tuple[GeneratedTests, RepairLog]:
     if not repo_dir.exists():
         raise FileNotFoundError(f"Repository not found: {repo_dir}")
     if maven_cmd is None:
@@ -51,18 +51,27 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
         user_input=build_test_prompt(repo_dir),
     )
 
+    first_attempt_valid: bool | None = None
+    first_attempt_status: str | None = None
+    repairs_attempted = 0
+
     for attempt in range(max_repairs + 1):
         print()
         print(f"[tests] Candidate attempt {attempt + 1}/{max_repairs + 1}")
         try:
             validate_generated_tests(parsed)
         except OutputValidationError as exc:
+            if first_attempt_valid is None:
+                first_attempt_valid = False
+                first_attempt_status = f"validation_error: {exc}"
+
             if attempt == max_repairs:
                 raise RuntimeError(
                     "Generated test suite failed semantic validation after repair attempts.\n"
                     f"{exc}"
                 ) from exc
 
+            repairs_attempted += 1
             print(
                 f"[tests] Validation failed ({exc}). "
                 f"Requesting repair attempt {attempt + 1}/{max_repairs}"
@@ -109,14 +118,25 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
             if staged_dir.exists():
                 shutil.rmtree(staged_dir, ignore_errors=True)
 
+        if first_attempt_valid is None:
+            first_attempt_valid = result.passed
+            first_attempt_status = result.status
+
         if result.passed:
             print("[tests] Verification passed. Test suite is valid.")
-            return parsed
+            repair_log = RepairLog(
+                first_attempt_valid=first_attempt_valid,
+                first_attempt_status=first_attempt_status or "passed",
+                repairs_attempted=repairs_attempted,
+                final_status="passed",
+            )
+            return parsed, repair_log
 
         if attempt == max_repairs:
             print("[tests] Verification failed and no repair attempts remain. Keeping the final generated suite for evaluation.")
             break
 
+        repairs_attempted += 1
         print(
             f"[tests] Verification failed "
             f"(exit={result.exit_code}, failures={result.failures}, errors={result.errors}). "
@@ -146,5 +166,10 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
             print(f"[tests] Repair response was incomplete ({exc}). Requesting another repair.")
             parsed = previous
 
-    return parsed
-
+    repair_log = RepairLog(
+        first_attempt_valid=first_attempt_valid if first_attempt_valid is not None else False,
+        first_attempt_status=first_attempt_status or "unknown",
+        repairs_attempted=repairs_attempted,
+        final_status="failed",
+    )
+    return parsed, repair_log

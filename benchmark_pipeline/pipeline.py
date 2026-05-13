@@ -17,7 +17,7 @@ from benchmark_pipeline.generation.runner import (
     run_test_generation,
 )
 from benchmark_pipeline.fs_utils import dump_json, reset_directory
-from benchmark_pipeline.models import GeneratedRepo, GeneratedTests
+from benchmark_pipeline.models import GeneratedRepo, GeneratedTests, RepairLog
 
 
 @dataclass(frozen=True)
@@ -34,12 +34,14 @@ class PipelineConfig:
     pitest_report_dir: Path
     maven_cmd: Sequence[str]
     max_repairs: int
+    domain: str | None = None
 
 
 @dataclass
 class PipelineOutcome:
     generated_repo: GeneratedRepo
     generated_tests: dict[str, GeneratedTests]
+    repair_logs: dict[str, RepairLog]
     test_generation_errors: dict[str, str]
     evaluations: list[EvaluationSuiteRun]
 
@@ -68,19 +70,21 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
             manifest_path=config.baseline_manifest,
             verify_cmd=config.maven_cmd,
             max_repairs=config.max_repairs,
+            domain=config.domain,
         )
     )
     print_step_done("baseline generation")
 
     print_step("test generation")
     generated_tests: dict[str, GeneratedTests] = {}
+    repair_logs: dict[str, RepairLog] = {}
     test_generation_errors: dict[str, str] = {}
     reset_directory(config.tests_dir)
     for model in config.tests_models:
         suite_name = safe_model_name(model)
         suite_dir = config.tests_dir / suite_name
         try:
-            generated_tests[model] = run_test_generation(
+            tests, repair_log = run_test_generation(
                 TestGenerationConfig(
                     repo_dir=config.baseline_repo,
                     output_dir=suite_dir,
@@ -89,6 +93,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
                     max_repairs=config.max_repairs,
                 )
             )
+            generated_tests[model] = tests
+            repair_logs[model] = repair_log
         except Exception as exc:
             test_generation_errors[model] = str(exc)
             if suite_dir.exists():
@@ -114,7 +120,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
             maven_cmd=config.maven_cmd,
         )
     )
-    write_comparison_reports(config, generated_tests, test_generation_errors, evaluations)
+    write_comparison_reports(config, generated_tests, repair_logs, test_generation_errors, evaluations)
     print_step_done("PIT evaluation")
 
     print()
@@ -122,6 +128,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     return PipelineOutcome(
         generated_repo=generated_repo,
         generated_tests=generated_tests,
+        repair_logs=repair_logs,
         test_generation_errors=test_generation_errors,
         evaluations=evaluations,
     )
@@ -143,10 +150,11 @@ def test_manifest_path(base_path: Path, suite_name: str, is_multi_model: bool) -
 def write_comparison_reports(
     config: PipelineConfig,
     generated_tests: dict[str, GeneratedTests],
+    repair_logs: dict[str, RepairLog],
     test_generation_errors: dict[str, str],
     evaluations: list[EvaluationSuiteRun],
 ) -> None:
-    payload = comparison_payload(config, generated_tests, test_generation_errors, evaluations)
+    payload = comparison_payload(config, generated_tests, repair_logs, test_generation_errors, evaluations)
     report_json = config.report_json.parent / "comparison_report.json"
     report_md = config.report_md.parent / "comparison_report.md"
     print(f"[pipeline] Writing comparison JSON report to {report_json.resolve()}")
@@ -159,6 +167,7 @@ def write_comparison_reports(
 def comparison_payload(
     config: PipelineConfig,
     generated_tests: dict[str, GeneratedTests],
+    repair_logs: dict[str, RepairLog],
     test_generation_errors: dict[str, str],
     evaluations: list[EvaluationSuiteRun],
 ) -> dict[str, object]:
@@ -180,6 +189,7 @@ def comparison_payload(
             continue
 
         generated = generated_tests.get(model)
+        repair_log = repair_logs.get(model)
         run = evaluations_by_suite.get(suite_name)
         if run is None:
             rows.append(
@@ -189,6 +199,9 @@ def comparison_payload(
                     "generation_status": "passed" if generated is not None else "missing",
                     "evaluation_status": "missing",
                     "generated_test_files": len(generated.files) if generated is not None else None,
+                    "first_attempt_valid": repair_log.first_attempt_valid if repair_log is not None else None,
+                    "first_attempt_status": repair_log.first_attempt_status if repair_log is not None else None,
+                    "repairs_attempted": repair_log.repairs_attempted if repair_log is not None else None,
                 }
             )
             continue
@@ -203,6 +216,9 @@ def comparison_payload(
                 "generation_status": "passed",
                 "evaluation_status": outcome.baseline_result.status,
                 "generated_test_files": len(generated.files) if generated is not None else None,
+                "first_attempt_valid": repair_log.first_attempt_valid if repair_log is not None else None,
+                "first_attempt_status": repair_log.first_attempt_status if repair_log is not None else None,
+                "repairs_attempted": repair_log.repairs_attempted if repair_log is not None else None,
                 "tests": outcome.baseline_result.tests,
                 "failures": outcome.baseline_result.failures,
                 "errors": outcome.baseline_result.errors,
@@ -278,17 +294,21 @@ def comparison_markdown(payload: dict[str, object]) -> str:
         f"- Repository model: `{payload['repo_model']}`",
         f"- Baseline repository: `{payload['baseline_repo']}`",
         "",
-        "| Test model | Generation | Evaluation | Tests | Skipped | Disabled | Line cov. | Branch cov. | Mutations | Killed | Survived | No coverage | Mutation score |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Test model | 1st attempt | Repairs | Generation | Evaluation | Tests | Skipped | Disabled | Line cov. | Branch cov. | Mutations | Killed | Survived | No coverage | Mutation score |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
 
     for row in rows:
         assert isinstance(row, dict)
+        first_attempt = row.get("first_attempt_valid")
+        first_attempt_cell = "N/A" if first_attempt is None else ("✅" if first_attempt else "❌")
         lines.append(
             "| "
             + " | ".join(
                 [
                     markdown_cell(row.get("test_model")),
+                    first_attempt_cell,
+                    markdown_cell(row.get("repairs_attempted")),
                     markdown_cell(row.get("generation_status")),
                     markdown_cell(row.get("evaluation_status")),
                     markdown_cell(row.get("tests")),
