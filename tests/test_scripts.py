@@ -134,6 +134,8 @@ class TestScripts(unittest.TestCase):
                     str(output_dir),
                     "--manifest",
                     str(manifest),
+                    "--max-repairs",
+                    "5",
                 ],
             ),
             redirect_stdout(StringIO()),
@@ -144,6 +146,7 @@ class TestScripts(unittest.TestCase):
         self.assertEqual(config.repo_dir, repo_dir)
         self.assertEqual(config.output_dir, output_dir)
         self.assertEqual(config.manifest_path, manifest)
+        self.assertEqual(config.max_repairs, 5)
 
     def test_test_benchmark_script_delegates_to_runner(self) -> None:
         module = load_script("2b_benchmark_tests.py")

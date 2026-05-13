@@ -28,6 +28,7 @@ class TestGenerationConfig:
     output_dir: Path
     model: str
     manifest_path: Path
+    max_repairs: int = 2
 
 
 def run_baseline_generation(config: BaselineGenerationConfig) -> GeneratedRepo:
@@ -55,6 +56,7 @@ def run_test_generation(config: TestGenerationConfig) -> GeneratedTests:
         repo_dir=config.repo_dir,
         output_dir=config.output_dir,
         model=config.model,
+        max_repairs=config.max_repairs,
     )
     print(f"[tests] Writing manifest to {config.manifest_path.resolve()}")
     dump_json(config.manifest_path, parsed.model_dump())

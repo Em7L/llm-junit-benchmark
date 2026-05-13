@@ -23,7 +23,7 @@ def main() -> None:
     parser.add_argument("--report-md", default="artifacts/reports/evaluation_report.md", help="Markdown report path for evaluation.")
     parser.add_argument("--pitest-report-dir", default="artifacts/reports/pit-reports", help="Directory where PIT XML/HTML reports are copied after evaluation.")
     parser.add_argument("--maven-cmd", nargs="+", default=["mvn", "test"], help="Maven command used for baseline verification and evaluation.")
-    parser.add_argument("--max-repairs", type=int, default=2, help="Maximum baseline repo repair attempts.")
+    parser.add_argument("--max-repairs", type=int, default=1, help="Maximum baseline repo repair attempts.")
     args = parser.parse_args()
 
     config = PipelineConfig(

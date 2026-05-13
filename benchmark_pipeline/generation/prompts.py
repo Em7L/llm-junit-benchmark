@@ -99,6 +99,7 @@ def build_test_prompt(repo_root: Path) -> str:
         - Assume `pom.xml` already contains JUnit 5 and Surefire.
         - Ensure the test files compile against the provided repository as-is.
         - Do not invent classes, methods, constructors, or fields that do not exist in the repository snapshot.
+        - Do not subclass final production classes or override methods unless the production code is explicitly designed for inheritance.
         - Ensure package declarations, imports, and file paths are consistent.
         - Prefer behavior-focused tests, not implementation-detail tests.
         - Cover normal cases, boundary cases, invalid-input cases, and cross-class workflow behavior where applicable.
@@ -131,9 +132,12 @@ def build_test_repair_prompt(repo_root: Path, build_output: str) -> str:
 
         Requirements:
         - Return only repository-relative test files to add/update in the repo.
+        - Return the complete repaired test suite, including unchanged test files.
+        - Do not return only the modified file.
         - Fix all compilation errors, import issues, and test failures.
         - Ensure the returned test suite passes `mvn test`.
         - Do not modify production code.
         - Do not invent classes, methods, constructors, or fields that do not exist in the production code.
+        - Do not subclass final production classes or override methods unless the production code is explicitly designed for inheritance.
         """
     ).strip()

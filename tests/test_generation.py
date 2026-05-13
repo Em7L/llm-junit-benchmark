@@ -211,6 +211,52 @@ class TestGenerationOrchestration(unittest.TestCase):
         self.assertIs(result, repaired)
         self.assertEqual(parse.call_count, 2)
         self.assertEqual(run_maven_tests.call_count, 2)
+        repair_prompt = parse.call_args_list[1].kwargs["user_input"]
+        self.assertIn("class BrokenTest {}", repair_prompt)
+
+    def test_generate_tests_rejects_repair_that_drops_existing_test_files(self) -> None:
+        repo_dir = self.root / "repo"
+        repo_dir.mkdir()
+        output_dir = self.root / "generated-tests"
+        broken = GeneratedTests(
+            summary="broken tests",
+            files=[
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class BrokenAppTest {}"),
+                FileArtifact(path="src/test/java/com/example/ServiceTest.java", content="class BrokenServiceTest {}"),
+            ],
+        )
+        incomplete_repair = GeneratedTests(
+            summary="incomplete repair",
+            files=[
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class AppTest {}"),
+            ],
+        )
+        complete_repair = GeneratedTests(
+            summary="complete repair",
+            files=[
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class AppTest {}"),
+                FileArtifact(path="src/test/java/com/example/ServiceTest.java", content="class ServiceTest {}"),
+            ],
+        )
+
+        with (
+            patch(
+                "benchmark_pipeline.generation.tests_generation.parse_structured_response",
+                side_effect=[broken, incomplete_repair, complete_repair],
+            ) as parse,
+            patch(
+                "benchmark_pipeline.generation.tests_generation.run_maven_tests",
+                side_effect=[failed_maven_result(), failed_maven_result(), passed_maven_result()],
+            ) as run_maven_tests,
+            redirect_stdout(StringIO()),
+        ):
+            result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=2)
+
+        self.assertIs(result, complete_repair)
+        self.assertEqual(parse.call_count, 3)
+        self.assertEqual(run_maven_tests.call_count, 3)
+        self.assertTrue((output_dir / "src/test/java/com/example/AppTest.java").exists())
+        self.assertTrue((output_dir / "src/test/java/com/example/ServiceTest.java").exists())
 
     def test_generate_verified_repo_repairs_after_failed_build(self) -> None:
         output_dir = self.root / "repo"
