@@ -12,7 +12,8 @@ import concurrent.futures
 from benchmark_pipeline.evaluation import EvaluationOutcome, evaluate_repositories
 from benchmark_pipeline.evaluation.comparison_reports import write_comparison_reports
 from benchmark_pipeline.evaluation.runner import EvaluationRunConfig, EvaluationSuiteRun, run_evaluation
-from benchmark_pipeline.fs_utils import directories_match, reset_directory
+from benchmark_pipeline.fs_utils import directories_match, dump_json, reset_directory
+from benchmark_pipeline.generation.profiles import BenchmarkProfile
 from benchmark_pipeline.generation.runner import (
     BaselineGenerationConfig,
     TestGenerationConfig,
@@ -26,9 +27,11 @@ from benchmark_pipeline.models import GeneratedRepo, GeneratedTests
 class PipelineConfig:
     repo_model: str
     tests_models: Sequence[str]
+    benchmark_profile: BenchmarkProfile
     project_name: str
     baseline_repo: Path
     tests_dir: Path
+    profile_manifest: Path
     baseline_manifest: Path
     tests_manifest: Path
     report_json: Path
@@ -36,7 +39,6 @@ class PipelineConfig:
     pitest_report_dir: Path
     maven_cmd: Sequence[str]
     max_repairs: int
-    domain: str | None = None
 
 
 @dataclass
@@ -59,8 +61,12 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     print("=" * 72)
     print("[pipeline] Running full benchmark pipeline")
     print(f"[pipeline] Repository model: {config.repo_model}")
+    print(f"[pipeline] Benchmark profile: {config.benchmark_profile.profile_id}")
     print(f"[pipeline] Test models: {', '.join(config.tests_models)}")
     print("=" * 72)
+
+    print(f"[pipeline] Writing benchmark profile manifest to {config.profile_manifest.resolve()}")
+    dump_json(config.profile_manifest, config.benchmark_profile.to_dict())
 
     print_step("baseline generation")
     generated_repo = run_baseline_generation(
@@ -71,7 +77,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
             manifest_path=config.baseline_manifest,
             verify_cmd=config.maven_cmd,
             max_repairs=config.max_repairs,
-            domain=config.domain,
+            benchmark_profile=config.benchmark_profile,
         )
     )
     print_step_done("baseline generation")
@@ -119,6 +125,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
         print("[pipeline] All test-generation models failed. Skipping PIT evaluation.")
         write_comparison_reports(
             repo_model=config.repo_model,
+            benchmark_profile=config.benchmark_profile,
             tests_models=list(config.tests_models),
             suite_names=suite_names,
             baseline_repo=config.baseline_repo,
@@ -172,6 +179,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
         )
     write_comparison_reports(
         repo_model=config.repo_model,
+        benchmark_profile=config.benchmark_profile,
         tests_models=list(config.tests_models),
         suite_names=suite_names,
         baseline_repo=config.baseline_repo,

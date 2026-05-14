@@ -12,6 +12,7 @@ import _path  # noqa: F401
 
 from benchmark_pipeline.evaluation import EvaluationOutcome
 from benchmark_pipeline.evaluation.runner import EvaluationSuiteRun
+from benchmark_pipeline.generation.profiles import get_benchmark_profile
 from benchmark_pipeline.models import GeneratedRepo, GeneratedTests, MavenResult, PitestMutation, PitestResult
 from benchmark_pipeline.pipeline import PipelineConfig, run_pipeline, safe_model_name, test_manifest_path
 
@@ -103,9 +104,11 @@ class TestPipeline(unittest.TestCase):
         return PipelineConfig(
             repo_model="repo-model",
             tests_models=tests_models,
+            benchmark_profile=get_benchmark_profile("library"),
             project_name="demo-project",
             baseline_repo=self.root / "baseline_repo",
             tests_dir=self.root / "generated_tests",
+            profile_manifest=self.root / "manifests/benchmark_profile.json",
             baseline_manifest=self.root / "manifests/baseline_repo.json",
             tests_manifest=self.root / "manifests/generated_tests.json",
             report_json=self.root / "reports/comparison_report.json",
@@ -141,6 +144,7 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(baseline_config.model, "repo-model")
         self.assertEqual(baseline_config.max_repairs, 2)
         self.assertEqual(baseline_config.manifest_path, config.baseline_manifest)
+        self.assertEqual(baseline_config.benchmark_profile.profile_id, "library")
 
         tests_config = run_test_generation.call_args.args[0]
         self.assertEqual(tests_config.model, "tests-model")
@@ -153,6 +157,8 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(evaluation_config.tests_dir, config.tests_dir)
 
         self.assertIs(outcome.evaluation, evaluation)
+        profile_manifest = json.loads(config.profile_manifest.read_text(encoding="utf-8"))
+        self.assertEqual(profile_manifest["profile_id"], "library")
 
     def test_run_pipeline_generates_one_suite_per_test_model(self) -> None:
         config = self.config(("model-b", "model-c"))
@@ -200,6 +206,7 @@ class TestPipeline(unittest.TestCase):
         run_evaluation.assert_called_once()
         comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
         self.assertEqual([row["test_model"] for row in comparison["rows"]], ["model-b", "model-c", "model-d"])
+        self.assertEqual(comparison["benchmark_profile"]["profile_id"], "library")
         self.assertEqual(comparison["rows"][1]["generation_status"], "failed")
         self.assertTrue((config.report_md.parent / "comparison_report.md").exists())
 
@@ -245,6 +252,7 @@ class TestPipeline(unittest.TestCase):
             },
         )
         comparison_markdown = (config.report_md.parent / "comparison_report.md").read_text(encoding="utf-8")
+        self.assertIn("Benchmark profile: `library`", comparison_markdown)
         self.assertIn("Identical mutant IDs across suites: `True`", comparison_markdown)
 
     def test_comparison_report_includes_initial_status_and_cleaning_outcome(self) -> None:

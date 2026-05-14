@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Sequence
 
 from benchmark_pipeline.fs_utils import dump_json
+from benchmark_pipeline.generation.profiles import BenchmarkProfile
 from benchmark_pipeline.models import GeneratedRepo, GeneratedTests
 from benchmark_pipeline.generation.repo_generation import generate_verified_repo
 from benchmark_pipeline.generation.tests_generation import generate_tests
@@ -20,7 +21,7 @@ class BaselineGenerationConfig:
     manifest_path: Path
     verify_cmd: Sequence[str]
     max_repairs: int
-    domain: str | None = None
+    benchmark_profile: BenchmarkProfile
 
 
 @dataclass(frozen=True)
@@ -45,7 +46,7 @@ def run_baseline_generation(config: BaselineGenerationConfig) -> GeneratedRepo:
         output_dir=config.output_dir,
         max_repairs=config.max_repairs,
         verify_cmd=list(config.verify_cmd),
-        domain=config.domain,
+        benchmark_profile=config.benchmark_profile,
     )
     print(f"[baseline] Writing manifest to {config.manifest_path.resolve()}")
     dump_json(config.manifest_path, parsed.model_dump())

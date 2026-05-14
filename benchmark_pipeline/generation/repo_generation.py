@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from benchmark_pipeline.fs_utils import reset_directory, write_artifacts
+from benchmark_pipeline.generation.profiles import BenchmarkProfile
 from benchmark_pipeline.tools.llm import parse_structured_response
 from benchmark_pipeline.tools.maven import run_maven_tests
 from benchmark_pipeline.models import GeneratedRepo
@@ -19,7 +20,7 @@ def generate_verified_repo(
     output_dir: Path,
     max_repairs: int,
     verify_cmd: list[str],
-    domain: str | None = None,
+    benchmark_profile: BenchmarkProfile | None = None,
 ) -> GeneratedRepo:
     print()
     print(f"[baseline] Requesting initial repository generation with model `{model}`")
@@ -30,7 +31,7 @@ def generate_verified_repo(
             "Generate a complete baseline Java Maven repository that satisfies the requirements. "
             "Return only structured data that matches the schema."
         ),
-        user_input=build_repo_prompt(project_name, domain=domain),
+        user_input=build_repo_prompt(project_name, benchmark_profile=benchmark_profile),
     )
 
     for attempt in range(max_repairs + 1):
@@ -60,6 +61,7 @@ def generate_verified_repo(
                     repo_root=output_dir,
                     project_name=project_name,
                     build_output=str(exc),
+                    benchmark_profile=benchmark_profile,
                 ),
             )
             continue
@@ -98,6 +100,7 @@ def generate_verified_repo(
                 repo_root=output_dir,
                 project_name=project_name,
                 build_output=f"{result.stdout}\n{result.stderr}".strip(),
+                benchmark_profile=benchmark_profile,
             ),
         )
 

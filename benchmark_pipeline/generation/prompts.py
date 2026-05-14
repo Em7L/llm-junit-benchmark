@@ -6,34 +6,20 @@ import textwrap
 from pathlib import Path
 
 from benchmark_pipeline.fs_utils import repo_snapshot, tree_listing
+from benchmark_pipeline.generation.profiles import BenchmarkProfile, render_benchmark_profile_prompt
 
 
-BENCHMARK_DOMAINS: list[str] = [
-    "grade-book",
-    "recipe-scaler",
-    "library-catalog",
-    "budget-tracker",
-    "payroll-calculator",
-    "inventory-manager",
-    "weather-analyzer",
-    "quiz-engine",
-    "fitness-planner",
-    "hotel-reservation",
-]
-
-
-def build_repo_prompt(project_name: str | None = None, domain: str | None = None) -> str:
+def build_repo_prompt(project_name: str | None = None, benchmark_profile: BenchmarkProfile | None = None) -> str:
     explicit_name = project_name or "generated-java-app"
-    if domain:
-        domain_instruction = f"- The application domain MUST be: {domain}."
+    if benchmark_profile is not None:
+        profile_instruction = render_benchmark_profile_prompt(benchmark_profile)
     else:
-        domain_instruction = "- Choose the application domain yourself."
+        profile_instruction = "- Choose the application domain yourself."
     return textwrap.dedent(
         f"""
         Build a complete, small Maven repository for JDK 21.
 
-        Application domain:
-        {domain_instruction}
+        {profile_instruction}
         - Suggested project name: `{explicit_name}`. Adjust it if a better name matches the chosen domain.
 
         Structural requirements:
@@ -89,15 +75,26 @@ def build_repo_prompt(project_name: str | None = None, domain: str | None = None
     ).strip()
 
 
-def build_repo_repair_prompt(repo_root: Path, project_name: str | None, build_output: str) -> str:
+def build_repo_repair_prompt(
+    repo_root: Path,
+    project_name: str | None,
+    build_output: str,
+    benchmark_profile: BenchmarkProfile | None = None,
+) -> str:
     snapshot = repo_snapshot(repo_root, include_extensions={".java", ".xml", ".md"})
     tree = tree_listing(repo_root)
     explicit_name = project_name or "generated-java-app"
+    profile_instruction = (
+        render_benchmark_profile_prompt(benchmark_profile)
+        if benchmark_profile is not None
+        else "- Preserve the same overall project idea unless the compiler errors force a structural correction."
+    )
     return textwrap.dedent(
         f"""
         The previously generated Maven/JDK21 repository did not compile or pass `mvn test`.
 
         Suggested project name: `{explicit_name}`.
+        {profile_instruction}
 
         Current repository tree:
         {tree}
@@ -114,7 +111,7 @@ def build_repo_repair_prompt(repo_root: Path, project_name: str | None, build_ou
 
         Requirements:
         - Return the complete repository as full file contents, not partial patches.
-        - Preserve the same overall project idea unless the compiler errors force a structural correction.
+        - Preserve the same benchmark profile and overall project idea unless the compiler errors force a structural correction.
         - Fix all compilation, packaging, import, and reference inconsistencies.
         - Ensure the returned repository passes `mvn test`.
         - Do not reference classes, methods, constructors, fields, or imports that are not defined in the returned repository.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from benchmark_pipeline.generation.profiles import BenchmarkProfile
 from benchmark_pipeline.classifications import (
     DISABLING_CLASSIFICATIONS,
     GENERATION_CLASSIFICATIONS,
@@ -20,6 +21,7 @@ from benchmark_pipeline.models import GeneratedTests
 def write_comparison_reports(
     *,
     repo_model: str,
+    benchmark_profile: BenchmarkProfile,
     tests_models: list[str],
     suite_names: dict[str, str],
     baseline_repo: Path,
@@ -32,6 +34,7 @@ def write_comparison_reports(
 ) -> None:
     payload = comparison_payload(
         repo_model=repo_model,
+        benchmark_profile=benchmark_profile,
         tests_models=tests_models,
         suite_names=suite_names,
         baseline_repo=baseline_repo,
@@ -52,6 +55,7 @@ def write_comparison_reports(
 def comparison_payload(
     *,
     repo_model: str,
+    benchmark_profile: BenchmarkProfile,
     tests_models: list[str],
     suite_names: dict[str, str],
     baseline_repo: Path,
@@ -132,6 +136,7 @@ def comparison_payload(
 
     return {
         "repo_model": repo_model,
+        "benchmark_profile": benchmark_profile.to_dict(),
         "test_models": tests_models,
         "baseline_repo": baseline_repo.as_posix(),
         "mutant_set": mutant_set_summary(evaluations),
@@ -229,6 +234,8 @@ def comparison_markdown(payload: dict[str, object]) -> str:
         "# Model Comparison Report",
         "",
         f"- Repository model: `{payload['repo_model']}`",
+        f"- Benchmark profile: `{payload['benchmark_profile']['profile_id']}`",
+        f"- Domain: `{payload['benchmark_profile']['domain']}`",
         f"- Baseline repository: `{payload['baseline_repo']}`",
     ]
     lines.extend(render_summary_table(rows))

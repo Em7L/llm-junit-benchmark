@@ -16,6 +16,7 @@ from benchmark_pipeline.generation.runner import (
     run_baseline_generation,
     run_test_generation,
 )
+from benchmark_pipeline.generation.profiles import get_benchmark_profile
 from benchmark_pipeline.models import FileArtifact, GeneratedRepo, GeneratedTests
 
 
@@ -53,6 +54,7 @@ class TestGenerationRunner(unittest.TestCase):
             manifest_path=self.root / "manifests/baseline.json",
             verify_cmd=["mvn", "test"],
             max_repairs=2,
+            benchmark_profile=get_benchmark_profile("library"),
         )
 
         with (
@@ -66,6 +68,10 @@ class TestGenerationRunner(unittest.TestCase):
         self.assertEqual(json.loads(config.manifest_path.read_text(encoding="utf-8"))["project_name"], "demo")
         self.assertEqual(generate_verified_repo.call_args.kwargs["model"], "repo-model")
         self.assertEqual(generate_verified_repo.call_args.kwargs["verify_cmd"], ["mvn", "test"])
+        self.assertEqual(
+            generate_verified_repo.call_args.kwargs["benchmark_profile"].profile_id,
+            "library",
+        )
 
     def test_test_generation_writes_manifest(self) -> None:
         config = TestGenerationConfig(

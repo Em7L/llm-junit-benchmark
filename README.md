@@ -40,49 +40,57 @@ Model provider selection is currently simple: model names containing `deepseek` 
 
 ## Run The Full Pipeline
 
-Run the complete workflow with the default models from `.env` or `benchmark_pipeline/config.py`:
+Run the complete workflow with the default models from `.env` or `benchmark_pipeline/config.py` and an explicit benchmark profile:
 
 ```powershell
-python 0_run_pipeline.py
+python 0_run_pipeline.py --profile-id library
 ```
 
 By default, each full pipeline run is preserved under a new run directory:
 
 ```text
-artifacts/runs/repo-<repo-model>__tests-<test-models>/run-001/
-artifacts/runs/repo-<repo-model>__tests-<test-models>/run-002/
+artifacts/runs/profile-<profile-id>__repo-<repo-model>__tests-<test-models>/run-001/
+artifacts/runs/profile-<profile-id>__repo-<repo-model>__tests-<test-models>/run-002/
 ```
 
 Run with explicit models:
 
 ```powershell
-python 0_run_pipeline.py --repo-model gpt-5.4-mini --tests-model gpt-4o
+python 0_run_pipeline.py --profile-id library --repo-model gpt-5.4-mini --tests-model gpt-4o
 ```
 
 Run the intended model-comparison workflow with one baseline generator and multiple test-suite generators:
 
 ```powershell
-python 0_run_pipeline.py --repo-model gpt-5.4-mini --tests-models gpt-4o gpt-5.4-mini gpt-4o-mini
+python 0_run_pipeline.py --profile-id billing --repo-model gpt-5.4-mini --tests-models gpt-4o gpt-5.4-mini gpt-4o-mini
 ```
+
+The benchmark profile determines the application domain for baseline repository generation. Profiles are defined centrally in [benchmark_pipeline/generation/profiles.py](benchmark_pipeline/generation/profiles.py). The current benchmark frame contains `4` fixed profiles:
+
+- `library`
+- `meal-planning`
+- `inventory`
+- `billing`
 
 The full pipeline does the following:
 
-1. Generates one baseline Java 21 Maven repository.
-2. Validates the generated repository structure.
-3. Runs Maven to verify that the baseline repository builds.
-4. Attempts to repair the baseline repository up to `--max-repairs` times if needed.
-5. Generates one JUnit 5 test suite per test model for the same verified baseline repository.
-6. Runs each generated test suite against the same baseline.
-7. Disables generated test methods that fail against the baseline, because the baseline is treated as the reference implementation for the experiment.
-8. Runs JaCoCo coverage and PIT mutation testing on each cleaned test suite.
-9. Writes comparison JSON/Markdown reports and copied PIT reports under `artifacts/reports`.
+1. Resolves one predefined benchmark profile.
+2. Generates one baseline Java 21 Maven repository for that profile.
+3. Validates the generated repository structure.
+4. Runs Maven to verify that the baseline repository builds.
+5. Attempts to repair the baseline repository up to `--max-repairs` times if needed.
+6. Generates one JUnit 5 test suite per test model for the same verified baseline repository.
+7. Runs each generated test suite against the same baseline.
+8. Disables generated test methods that fail against the baseline, because the baseline is treated as the reference implementation for the experiment.
+9. Runs JaCoCo coverage and PIT mutation testing on each cleaned test suite.
+10. Writes comparison JSON/Markdown reports and copied PIT reports under the run directory.
 
 ## Compare Multiple Test Models
 
-Use `0_run_pipeline.py --tests-models ...` for the main experiment. The pipeline generates one baseline repository and then creates one generated test suite per test model under:
+Use `0_run_pipeline.py --profile-id ... --tests-models ...` for the main experiment. The pipeline generates one baseline repository and then creates one generated test suite per test model under:
 
 ```text
-artifacts/generated_tests/<model-name>/
+artifacts/runs/<model-combination>/run-N/generated_tests/<model-name>/
 ```
 
 Evaluation then compares all generated suites against the same baseline repository under the same Maven, JaCoCo, and PIT procedure.
@@ -93,7 +101,9 @@ The main generated files and folders are:
 
 - `artifacts/runs/<model-combination>/run-N/baseline_repo/`: generated Java Maven repository
 - `artifacts/runs/<model-combination>/run-N/generated_tests/<model-name>/`: generated JUnit 5 tests for each test model
+- `artifacts/runs/<model-combination>/run-N/generated_tests/_initial/<model-name>/`: preserved initial pre-repair test-suite snapshot when repair is attempted
 - `artifacts/runs/<model-combination>/run-N/manifests/`: structured LLM responses saved as JSON
+- `artifacts/runs/<model-combination>/run-N/manifests/benchmark_profile.json`: selected benchmark profile for the run
 - `artifacts/runs/<model-combination>/run-N/reports/comparison_report.json`: machine-readable comparison report
 - `artifacts/runs/<model-combination>/run-N/reports/comparison_report.md`: Markdown comparison table across test models
 - `artifacts/runs/<model-combination>/run-N/reports/pit-reports/`: copied PIT XML/HTML reports
