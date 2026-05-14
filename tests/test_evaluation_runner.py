@@ -67,8 +67,6 @@ class TestEvaluationRunner(unittest.TestCase):
         config = EvaluationRunConfig(
             baseline_repo=baseline_repo,
             tests_dir=benchmarks,
-            report_json=self.root / "reports/evaluation_report.json",
-            report_md=self.root / "reports/evaluation_report.md",
             pitest_report_dir=self.root / "reports/pit-reports",
             maven_cmd=["mvn", "test"],
         )
@@ -86,8 +84,8 @@ class TestEvaluationRunner(unittest.TestCase):
             runs = run_evaluation(config)
 
         self.assertEqual([run.suite_name for run in runs], ["model-a", "model-b"])
-        self.assertEqual(runs[0].report_json, self.root / "reports/model-a_report.json")
-        self.assertEqual(runs[1].report_md, self.root / "reports/model-b_report.md")
+        self.assertEqual(runs[0].pitest_report_dir, self.root / "reports/pit-reports/model-a")
+        self.assertEqual(runs[1].pitest_report_dir, self.root / "reports/pit-reports/model-b")
         self.assertEqual(evaluate_repositories.call_count, 2)
 
     def test_run_evaluation_uses_model_specific_report_paths_for_single_nested_suite(self) -> None:
@@ -98,8 +96,6 @@ class TestEvaluationRunner(unittest.TestCase):
         config = EvaluationRunConfig(
             baseline_repo=baseline_repo,
             tests_dir=generated_tests,
-            report_json=self.root / "reports/evaluation_report.json",
-            report_md=self.root / "reports/evaluation_report.md",
             pitest_report_dir=self.root / "reports/pit-reports",
             maven_cmd=["mvn", "test"],
         )
@@ -117,7 +113,6 @@ class TestEvaluationRunner(unittest.TestCase):
             runs = run_evaluation(config)
 
         self.assertEqual([run.suite_name for run in runs], ["model-a"])
-        self.assertEqual(runs[0].report_json, self.root / "reports/model-a_report.json")
         self.assertEqual(runs[0].pitest_report_dir, self.root / "reports/pit-reports/model-a")
 
 

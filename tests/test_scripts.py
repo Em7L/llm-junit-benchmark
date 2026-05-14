@@ -131,7 +131,7 @@ class TestScripts(unittest.TestCase):
         expected_run = output_root / "repo-repo-model__tests-test-model" / "run-002"
         self.assertEqual(config.baseline_repo, expected_run / "baseline_repo")
         self.assertEqual(config.tests_dir, expected_run / "generated_tests")
-        self.assertEqual(config.report_md, expected_run / "reports/evaluation_report.md")
+        self.assertEqual(config.report_md, expected_run / "reports/comparison_report.md")
 
     def test_run_pipeline_script_accepts_multiple_test_models(self) -> None:
         module = load_script("0_run_pipeline.py")
@@ -252,6 +252,7 @@ class TestScripts(unittest.TestCase):
 
         with (
             patch.object(module, "run_evaluation") as run_evaluation,
+            patch.object(module, "write_comparison_reports") as write_comparison_reports,
             patch.object(
                 sys,
                 "argv",
@@ -274,8 +275,38 @@ class TestScripts(unittest.TestCase):
         config = run_evaluation.call_args.args[0]
         self.assertEqual(config.baseline_repo, baseline_repo)
         self.assertEqual(config.tests_dir, tests_dir)
-        self.assertEqual(config.report_json, report_json)
-        self.assertEqual(config.report_md, report_md)
+        self.assertEqual(config.pitest_report_dir, Path("artifacts/reports/pit-reports"))
+        write_comparison_reports.assert_called_once()
+
+    def test_evaluation_script_writes_only_comparison_reports(self) -> None:
+        module = load_script("3_evaluate_with_pitest.py")
+        baseline_repo = self.root / "repo"
+        tests_dir = self.root / "tests"
+        baseline_repo.mkdir()
+        (tests_dir / "src/test/java").mkdir(parents=True)
+        runs = []
+
+        with (
+            patch.object(module, "run_evaluation", return_value=runs),
+            patch.object(module, "write_comparison_reports") as write_comparison_reports,
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "3_evaluate_with_pitest.py",
+                    "--baseline-repo",
+                    str(baseline_repo),
+                    "--tests-dir",
+                    str(tests_dir),
+                ],
+            ),
+            redirect_stdout(StringIO()),
+        ):
+            module.main()
+
+        kwargs = write_comparison_reports.call_args.kwargs
+        self.assertEqual(kwargs["report_json"], Path("artifacts/reports/comparison_report.json"))
+        self.assertEqual(kwargs["report_md"], Path("artifacts/reports/comparison_report.md"))
 
 
 if __name__ == "__main__":

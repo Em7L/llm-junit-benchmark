@@ -40,8 +40,8 @@ def write_comparison_reports(
         evaluations=evaluations,
         initial_evaluations=initial_evaluations,
     )
-    comparison_json = report_json.parent / "comparison_report.json"
-    comparison_md = report_md.parent / "comparison_report.md"
+    comparison_json = report_json
+    comparison_md = report_md
     print(f"[pipeline] Writing comparison JSON report to {comparison_json.resolve()}")
     dump_json(comparison_json, payload)
     comparison_md.parent.mkdir(parents=True, exist_ok=True)
@@ -87,7 +87,6 @@ def comparison_payload(
                     "suite_name": suite_name,
                     "generation_status": "passed" if generated is not None else "missing",
                     "evaluation_status": "missing",
-                    "generated_test_files": len(generated.files) if generated is not None else None,
                 }
             )
             continue
@@ -113,7 +112,6 @@ def comparison_payload(
                     initial_baseline_result=outcome.initial_baseline_result,
                 ),
                 "evaluation_status": outcome.baseline_result.status,
-                "generated_test_files": len(generated.files) if generated is not None else None,
                 "tests": outcome.baseline_result.tests,
                 "failures": outcome.baseline_result.failures,
                 "errors": outcome.baseline_result.errors,
@@ -127,8 +125,6 @@ def comparison_payload(
                 "survived": pitest.status_counts.get("SURVIVED", 0) if pitest is not None else None,
                 "no_coverage": pitest.status_counts.get("NO_COVERAGE", 0) if pitest is not None else None,
                 "mutation_score": pitest.mutation_score if pitest is not None else None,
-                "report_json": run.report_json.as_posix(),
-                "report_md": run.report_md.as_posix(),
                 "before_repair": before_snapshot or after_snapshot,
                 "after_repair": after_snapshot,
             }

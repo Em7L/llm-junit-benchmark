@@ -7,11 +7,10 @@ from pathlib import Path
 import shutil
 from typing import Sequence
 
-from benchmark_pipeline.fs_utils import dump_json, stage_repo_with_tests
+from benchmark_pipeline.fs_utils import stage_repo_with_tests
 from benchmark_pipeline.tools.maven import parse_jacoco_report, run_maven_command, run_maven_tests
 from benchmark_pipeline.models import JacocoCoverage, MavenResult, PitestResult
 from benchmark_pipeline.tools.pitest import persist_pitest_reports, run_pitest
-from benchmark_pipeline.evaluation.reports import as_serializable_coverage, as_serializable_maven_result, as_serializable_pitest_result
 from benchmark_pipeline.evaluation.test_cleaning import disable_baseline_failing_tests
 
 
@@ -22,19 +21,6 @@ class EvaluationOutcome:
     pitest_result: PitestResult | None
     disabled_tests: list[str]
     initial_baseline_result: MavenResult | None = None
-
-    @property
-    def payload(self) -> dict[str, object]:
-        payload = {
-            "initial_baseline_result": as_serializable_maven_result(self.initial_baseline_result)
-            if self.initial_baseline_result is not None
-            else None,
-            "baseline_result": as_serializable_maven_result(self.baseline_result),
-            "baseline_coverage": as_serializable_coverage(self.baseline_coverage),
-            "pitest_result": as_serializable_pitest_result(self.pitest_result),
-            "disabled_tests": self.disabled_tests,
-        }
-        return payload
 
 
 def evaluate_repositories(
@@ -75,7 +61,3 @@ def evaluate_repositories(
         for staged_dir in staged_dirs:
             if staged_dir.exists():
                 shutil.rmtree(staged_dir, ignore_errors=True)
-
-
-def write_evaluation_json(report_json: Path, outcome: EvaluationOutcome) -> None:
-    dump_json(report_json, outcome.payload)

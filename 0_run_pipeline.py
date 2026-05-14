@@ -23,8 +23,8 @@ def main() -> None:
     parser.add_argument("--tests-dir", default=None, help="Generated tests output directory.")
     parser.add_argument("--baseline-manifest", default=None, help="Manifest path for baseline generation.")
     parser.add_argument("--tests-manifest", default=None, help="Manifest path for generated tests.")
-    parser.add_argument("--report-json", default=None, help="JSON report path for evaluation.")
-    parser.add_argument("--report-md", default=None, help="Markdown report path for evaluation.")
+    parser.add_argument("--report-json", default=None, help="JSON path for the comparison report.")
+    parser.add_argument("--report-md", default=None, help="Markdown path for the comparison report.")
     parser.add_argument("--pitest-report-dir", default=None, help="Directory where PIT XML/HTML reports are copied after evaluation.")
     parser.add_argument("--maven-cmd", nargs="+", default=["mvn", "test"], help="Maven command used for baseline verification and evaluation.")
     parser.add_argument("--max-repairs", type=int, default=1, help="Maximum repository and test-suite repair attempts.")
@@ -46,8 +46,8 @@ def main() -> None:
         tests_dir=Path(args.tests_dir) if args.tests_dir else run_dir / "generated_tests",
         baseline_manifest=Path(args.baseline_manifest) if args.baseline_manifest else run_dir / "manifests/baseline_repo.json",
         tests_manifest=Path(args.tests_manifest) if args.tests_manifest else run_dir / "manifests/generated_tests.json",
-        report_json=Path(args.report_json) if args.report_json else run_dir / "reports/evaluation_report.json",
-        report_md=Path(args.report_md) if args.report_md else run_dir / "reports/evaluation_report.md",
+        report_json=Path(args.report_json) if args.report_json else run_dir / "reports/comparison_report.json",
+        report_md=Path(args.report_md) if args.report_md else run_dir / "reports/comparison_report.md",
         pitest_report_dir=Path(args.pitest_report_dir) if args.pitest_report_dir else run_dir / "reports/pit-reports",
         maven_cmd=args.maven_cmd,
         max_repairs=args.max_repairs,

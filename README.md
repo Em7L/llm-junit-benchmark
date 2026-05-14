@@ -75,7 +75,7 @@ The full pipeline does the following:
 6. Runs each generated test suite against the same baseline.
 7. Disables generated test methods that fail against the baseline, because the baseline is treated as the reference implementation for the experiment.
 8. Runs JaCoCo coverage and PIT mutation testing on each cleaned test suite.
-9. Writes JSON, Markdown, and PIT reports under `artifacts/reports`.
+9. Writes comparison JSON/Markdown reports and copied PIT reports under `artifacts/reports`.
 
 ## Run Individual Steps
 
@@ -96,6 +96,8 @@ Evaluate generated tests with Maven, JaCoCo, and PIT:
 ```powershell
 python 3_evaluate_with_pitest.py
 ```
+
+This standalone evaluation step writes only the comparison report plus copied PIT reports.
 
 The default paths are:
 
@@ -120,8 +122,6 @@ The main generated files and folders are:
 - `artifacts/runs/<model-combination>/run-N/baseline_repo/`: generated Java Maven repository
 - `artifacts/runs/<model-combination>/run-N/generated_tests/<model-name>/`: generated JUnit 5 tests for each test model
 - `artifacts/runs/<model-combination>/run-N/manifests/`: structured LLM responses saved as JSON
-- `artifacts/runs/<model-combination>/run-N/reports/<model-name>_report.json`: machine-readable per-model evaluation report
-- `artifacts/runs/<model-combination>/run-N/reports/<model-name>_report.md`: human-readable per-model evaluation report
 - `artifacts/runs/<model-combination>/run-N/reports/comparison_report.json`: machine-readable comparison report
 - `artifacts/runs/<model-combination>/run-N/reports/comparison_report.md`: Markdown comparison table across test models
 - `artifacts/runs/<model-combination>/run-N/reports/pit-reports/`: copied PIT XML/HTML reports

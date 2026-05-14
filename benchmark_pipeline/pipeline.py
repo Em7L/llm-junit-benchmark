@@ -145,11 +145,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
         EvaluationRunConfig(
             baseline_repo=config.baseline_repo,
             tests_dir=config.tests_dir,
-            report_json=config.report_json,
-            report_md=config.report_md,
             pitest_report_dir=config.pitest_report_dir,
             maven_cmd=config.maven_cmd,
-            suite_generated_tests={suite_names[model]: tests for model, tests in generated_tests.items()},
         )
     )
     evaluations_by_suite = {run.suite_name: run.outcome for run in evaluations}

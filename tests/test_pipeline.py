@@ -108,8 +108,8 @@ class TestPipeline(unittest.TestCase):
             tests_dir=self.root / "generated_tests",
             baseline_manifest=self.root / "manifests/baseline_repo.json",
             tests_manifest=self.root / "manifests/generated_tests.json",
-            report_json=self.root / "reports/evaluation_report.json",
-            report_md=self.root / "reports/evaluation_report.md",
+            report_json=self.root / "reports/comparison_report.json",
+            report_md=self.root / "reports/comparison_report.md",
             pitest_report_dir=self.root / "reports/pit-reports",
             maven_cmd=["mvn", "test"],
             max_repairs=2,
@@ -128,8 +128,6 @@ class TestPipeline(unittest.TestCase):
                     EvaluationSuiteRun(
                         suite_name="evaluation",
                         suite_dir=config.tests_dir,
-                        report_json=config.report_json,
-                        report_md=config.report_md,
                         pitest_report_dir=config.pitest_report_dir,
                         outcome=evaluation,
                     )
@@ -153,7 +151,6 @@ class TestPipeline(unittest.TestCase):
         evaluation_config = run_evaluation.call_args.args[0]
         self.assertEqual(evaluation_config.baseline_repo, config.baseline_repo)
         self.assertEqual(evaluation_config.tests_dir, config.tests_dir)
-        self.assertEqual(evaluation_config.report_json, config.report_json)
 
         self.assertIs(outcome.evaluation, evaluation)
 
@@ -220,16 +217,12 @@ class TestPipeline(unittest.TestCase):
                     EvaluationSuiteRun(
                         suite_name="model-b",
                         suite_dir=config.tests_dir / "model-b",
-                        report_json=config.report_json.parent / "model-b_report.json",
-                        report_md=config.report_md.parent / "model-b_report.md",
                         pitest_report_dir=config.pitest_report_dir / "model-b",
                         outcome=model_b_outcome,
                     ),
                     EvaluationSuiteRun(
                         suite_name="model-c",
                         suite_dir=config.tests_dir / "model-c",
-                        report_json=config.report_json.parent / "model-c_report.json",
-                        report_md=config.report_md.parent / "model-c_report.md",
                         pitest_report_dir=config.pitest_report_dir / "model-c",
                         outcome=model_c_outcome,
                     ),
@@ -298,8 +291,6 @@ class TestPipeline(unittest.TestCase):
                     EvaluationSuiteRun(
                         suite_name="model-b",
                         suite_dir=config.tests_dir / "model-b",
-                        report_json=config.report_json.parent / "model-b_report.json",
-                        report_md=config.report_md.parent / "model-b_report.md",
                         pitest_report_dir=config.pitest_report_dir / "model-b",
                         outcome=outcome,
                     )
@@ -373,8 +364,6 @@ class TestPipeline(unittest.TestCase):
                     EvaluationSuiteRun(
                         suite_name="model-b",
                         suite_dir=config.tests_dir / "model-b",
-                        report_json=config.report_json.parent / "model-b_report.json",
-                        report_md=config.report_md.parent / "model-b_report.md",
                         pitest_report_dir=config.pitest_report_dir / "model-b",
                         outcome=evaluation_outcome(pitest_result(["mutant-1"])),
                     )
@@ -433,8 +422,6 @@ class TestPipeline(unittest.TestCase):
                     EvaluationSuiteRun(
                         suite_name="model-b",
                         suite_dir=config.tests_dir / "model-b",
-                        report_json=config.report_json.parent / "model-b_report.json",
-                        report_md=config.report_md.parent / "model-b_report.md",
                         pitest_report_dir=config.pitest_report_dir / "model-b",
                         outcome=shared_outcome,
                     )
@@ -464,16 +451,12 @@ class TestPipeline(unittest.TestCase):
                     EvaluationSuiteRun(
                         suite_name="model-b",
                         suite_dir=config.tests_dir / "model-b",
-                        report_json=config.report_json.parent / "model-b_report.json",
-                        report_md=config.report_md.parent / "model-b_report.md",
                         pitest_report_dir=config.pitest_report_dir / "model-b",
                         outcome=model_b_outcome,
                     ),
                     EvaluationSuiteRun(
                         suite_name="model-c",
                         suite_dir=config.tests_dir / "model-c",
-                        report_json=config.report_json.parent / "model-c_report.json",
-                        report_md=config.report_md.parent / "model-c_report.md",
                         pitest_report_dir=config.pitest_report_dir / "model-c",
                         outcome=model_c_outcome,
                     ),
