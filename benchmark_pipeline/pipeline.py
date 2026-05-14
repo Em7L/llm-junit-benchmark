@@ -116,10 +116,27 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
                 test_generation_errors[model] = error
 
     if not generated_tests:
-        raise RuntimeError(
-            "All test-generation models failed. "
-            "No test suites are available for evaluation.\n"
-            + "\n".join(f"- {model}: {error}" for model, error in test_generation_errors.items())
+        print("[pipeline] All test-generation models failed. Skipping PIT evaluation.")
+        write_comparison_reports(
+            repo_model=config.repo_model,
+            tests_models=list(config.tests_models),
+            suite_names=suite_names,
+            baseline_repo=config.baseline_repo,
+            report_json=config.report_json,
+            report_md=config.report_md,
+            generated_tests=generated_tests,
+            test_generation_errors=test_generation_errors,
+            evaluations=[],
+            initial_evaluations={},
+        )
+        print_step_done("test generation")
+        print()
+        print("[pipeline] Full pipeline completed with no evaluable test suites")
+        return PipelineOutcome(
+            generated_repo=generated_repo,
+            generated_tests=generated_tests,
+            test_generation_errors=test_generation_errors,
+            evaluations=[],
         )
     print_step_done("test generation")
 
