@@ -490,7 +490,7 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(comparison["mutant_set"]["only_in_suite"]["model-b"], ["mutant-2"])
         self.assertEqual(comparison["mutant_set"]["only_in_suite"]["model-c"], ["mutant-3"])
 
-    def test_run_pipeline_fails_when_all_test_models_fail(self) -> None:
+    def test_run_pipeline_writes_comparison_report_when_all_test_models_fail(self) -> None:
         config = self.config(("model-b", "model-c"))
 
         with (
@@ -502,10 +502,16 @@ class TestPipeline(unittest.TestCase):
             patch("benchmark_pipeline.pipeline.run_evaluation") as run_evaluation,
             redirect_stdout(StringIO()),
         ):
-            with self.assertRaisesRegex(RuntimeError, "All test-generation models failed"):
-                run_pipeline(config)
+            outcome = run_pipeline(config)
 
         run_evaluation.assert_not_called()
+        self.assertEqual(outcome.generated_tests, {})
+        self.assertEqual(
+            outcome.test_generation_errors,
+            {"model-b": "model-b failed", "model-c": "model-c failed"},
+        )
+        comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
+        self.assertEqual([row["generation_status"] for row in comparison["rows"]], ["failed", "failed"])
 
     def test_safe_model_name_removes_path_unsafe_characters(self) -> None:
         self.assertEqual(safe_model_name("provider/model:latest"), "provider_model_latest")
