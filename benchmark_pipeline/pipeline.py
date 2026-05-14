@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import shutil
 from typing import Sequence
+import concurrent.futures
 
 from benchmark_pipeline.evaluation import EvaluationOutcome, evaluate_repositories
 from benchmark_pipeline.evaluation.comparison_reports import write_comparison_reports
@@ -81,11 +82,11 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     suite_names = {model: safe_model_name(model) for model in config.tests_models}
     initial_tests_root = config.tests_dir / "_initial"
     reset_directory(config.tests_dir)
-    for model in config.tests_models:
+    def generate_for_model(model: str) -> tuple[str, GeneratedTests | None, str | None]:
         suite_name = suite_names[model]
         suite_dir = config.tests_dir / suite_name
         try:
-            generated_tests[model] = run_test_generation(
+            tests = run_test_generation(
                 TestGenerationConfig(
                     repo_dir=config.baseline_repo,
                     output_dir=suite_dir,
@@ -95,14 +96,24 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
                     initial_output_dir=initial_tests_root / suite_name,
                 )
             )
+            return (model, tests, None)
         except Exception as exc:
-            test_generation_errors[model] = str(exc)
             if suite_dir.exists():
                 shutil.rmtree(suite_dir, ignore_errors=True)
             initial_suite_dir = initial_tests_root / suite_name
             if initial_suite_dir.exists():
                 shutil.rmtree(initial_suite_dir, ignore_errors=True)
             print(f"[pipeline] Test generation failed for `{model}`: {exc}")
+            return (model, None, str(exc))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(config.tests_models)) as executor:
+        futures = {executor.submit(generate_for_model, model): model for model in config.tests_models}
+        for future in concurrent.futures.as_completed(futures):
+            model, tests, error = future.result()
+            if tests is not None:
+                generated_tests[model] = tests
+            if error is not None:
+                test_generation_errors[model] = error
 
     if not generated_tests:
         raise RuntimeError(
