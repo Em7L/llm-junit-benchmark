@@ -2,7 +2,7 @@
 
 This project is a Python pipeline for generating small Java/Maven repositories, generating JUnit 5 test suites for them with LLMs, and evaluating the generated tests with Maven, JaCoCo, and PIT mutation testing.
 
-The numbered Python files are CLI entrypoints. The implementation lives in the `benchmark_pipeline/` package.
+The main CLI entrypoint is `0_run_pipeline.py`. The implementation lives in the `benchmark_pipeline/` package.
 
 ## Prerequisites
 
@@ -77,34 +77,6 @@ The full pipeline does the following:
 8. Runs JaCoCo coverage and PIT mutation testing on each cleaned test suite.
 9. Writes comparison JSON/Markdown reports and copied PIT reports under `artifacts/reports`.
 
-## Run Individual Steps
-
-Generate only the baseline repository:
-
-```powershell
-python 1_generate_baseline_repo.py --model gpt-5.4-mini
-```
-
-Generate tests for an existing baseline repository:
-
-```powershell
-python 2_generate_tests.py --model gpt-4o
-```
-
-Evaluate generated tests with Maven, JaCoCo, and PIT:
-
-```powershell
-python 3_evaluate_with_pitest.py
-```
-
-This standalone evaluation step writes only the comparison report plus copied PIT reports.
-
-The default paths are:
-
-- Baseline repository: `artifacts/baseline_repo`
-- Generated tests: `artifacts/generated_tests`
-- Reports: `artifacts/reports`
-
 ## Compare Multiple Test Models
 
 Use `0_run_pipeline.py --tests-models ...` for the main experiment. The pipeline generates one baseline repository and then creates one generated test suite per test model under:
@@ -153,7 +125,7 @@ python -m ruff check .
 Compile-check the Python files:
 
 ```powershell
-python -m compileall 0_run_pipeline.py 1_generate_baseline_repo.py 2_generate_tests.py 3_evaluate_with_pitest.py benchmark_pipeline tests
+python -m compileall 0_run_pipeline.py benchmark_pipeline tests
 ```
 
 ## Notes
