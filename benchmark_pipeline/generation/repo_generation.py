@@ -19,6 +19,7 @@ def generate_verified_repo(
     output_dir: Path,
     max_repairs: int,
     verify_cmd: list[str],
+    domain: str | None = None,
 ) -> GeneratedRepo:
     print()
     print(f"[baseline] Requesting initial repository generation with model `{model}`")
@@ -29,7 +30,7 @@ def generate_verified_repo(
             "Generate a complete baseline Java Maven repository that satisfies the requirements. "
             "Return only structured data that matches the schema."
         ),
-        user_input=build_repo_prompt(project_name),
+        user_input=build_repo_prompt(project_name, domain=domain),
     )
 
     for attempt in range(max_repairs + 1):

@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from benchmark_pipeline.config import REPO_GEN_MODEL, TEST_GEN_MODEL
+from benchmark_pipeline.generation.prompts import BENCHMARK_DOMAINS
 from benchmark_pipeline.pipeline import PipelineConfig, run_pipeline, safe_model_name
 
 
@@ -27,6 +28,7 @@ def main() -> None:
     parser.add_argument("--pitest-report-dir", default=None, help="Directory where PIT XML/HTML reports are copied after evaluation.")
     parser.add_argument("--maven-cmd", nargs="+", default=["mvn", "test"], help="Maven command used for baseline verification and evaluation.")
     parser.add_argument("--max-repairs", type=int, default=1, help="Maximum repository and test-suite repair attempts.")
+    parser.add_argument("--domain", default=None, choices=BENCHMARK_DOMAINS, help="Application domain for the generated repository. One of: " + ", ".join(BENCHMARK_DOMAINS))
     args = parser.parse_args()
 
     default_model = args.model or TEST_GEN_MODEL
@@ -49,6 +51,7 @@ def main() -> None:
         pitest_report_dir=Path(args.pitest_report_dir) if args.pitest_report_dir else run_dir / "reports/pit-reports",
         maven_cmd=args.maven_cmd,
         max_repairs=args.max_repairs,
+        domain=args.domain,
     )
     run_pipeline(config)
 

@@ -6,12 +6,12 @@ from pathlib import Path
 import shutil
 
 from benchmark_pipeline.classifications import classify_repair
-from benchmark_pipeline.fs_utils import reset_directory, write_artifacts, stage_repo_with_tests
-from benchmark_pipeline.tools.llm import parse_structured_response
-from benchmark_pipeline.tools.maven import run_maven_tests
-from benchmark_pipeline.models import GeneratedTests, MavenResult
+from benchmark_pipeline.fs_utils import reset_directory, stage_repo_with_tests, write_artifacts
 from benchmark_pipeline.generation.prompts import build_test_prompt, build_test_repair_prompt
 from benchmark_pipeline.generation.validation import OutputValidationError, validate_generated_tests
+from benchmark_pipeline.models import GeneratedTests, MavenResult
+from benchmark_pipeline.tools.llm import parse_structured_response
+from benchmark_pipeline.tools.maven import run_maven_tests
 
 
 def count_test_files(generated_tests: GeneratedTests) -> int:
@@ -49,7 +49,7 @@ def generate_tests(
     print("-" * 72)
     print(f"[tests] Reading baseline repository from {repo_dir.resolve()}")
     print(f"[tests] Requesting initial generated test suite with model `{model}`")
-    
+
     parsed = parse_structured_response(
         model=model,
         schema=GeneratedTests,
@@ -64,6 +64,7 @@ def generate_tests(
     final_repair_discarded = False
     first_verification_result: MavenResult | None = None
     initial_snapshot_written = False
+    result: MavenResult | None = None
 
     for attempt in range(max_repairs + 1):
         print()
@@ -118,7 +119,6 @@ def generate_tests(
         reset_directory(output_dir)
         write_artifacts(output_dir, parsed.files)
 
-        # Stage and verify
         staged_dir = stage_repo_with_tests(repo_dir, output_dir)
         try:
             print(f"[tests] Verifying test suite with: {' '.join(maven_cmd)}")
@@ -190,4 +190,3 @@ def generate_tests(
         final_repair_discarded=final_repair_discarded,
     )
     return parsed
-

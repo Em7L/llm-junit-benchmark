@@ -11,13 +11,13 @@ from typing import Sequence
 from benchmark_pipeline.evaluation import EvaluationOutcome, evaluate_repositories
 from benchmark_pipeline.evaluation.comparison_reports import write_comparison_reports
 from benchmark_pipeline.evaluation.runner import EvaluationRunConfig, EvaluationSuiteRun, run_evaluation
+from benchmark_pipeline.fs_utils import reset_directory
 from benchmark_pipeline.generation.runner import (
     BaselineGenerationConfig,
     TestGenerationConfig,
     run_baseline_generation,
     run_test_generation,
 )
-from benchmark_pipeline.fs_utils import reset_directory
 from benchmark_pipeline.models import GeneratedRepo, GeneratedTests
 
 
@@ -35,6 +35,7 @@ class PipelineConfig:
     pitest_report_dir: Path
     maven_cmd: Sequence[str]
     max_repairs: int
+    domain: str | None = None
 
 
 @dataclass
@@ -69,6 +70,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
             manifest_path=config.baseline_manifest,
             verify_cmd=config.maven_cmd,
             max_repairs=config.max_repairs,
+            domain=config.domain,
         )
     )
     print_step_done("baseline generation")

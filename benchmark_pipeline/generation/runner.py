@@ -20,6 +20,7 @@ class BaselineGenerationConfig:
     manifest_path: Path
     verify_cmd: Sequence[str]
     max_repairs: int
+    domain: str | None = None
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ def run_baseline_generation(config: BaselineGenerationConfig) -> GeneratedRepo:
         output_dir=config.output_dir,
         max_repairs=config.max_repairs,
         verify_cmd=list(config.verify_cmd),
+        domain=config.domain,
     )
     print(f"[baseline] Writing manifest to {config.manifest_path.resolve()}")
     dump_json(config.manifest_path, parsed.model_dump())
