@@ -341,8 +341,8 @@ def render_comparison_table(
         "",
         f"## {title}",
         "",
-        "| Test model | Before disabling | Before tests | Before failures | Before errors | Before skipped | Disabling | After disabling | After tests | After failures | After errors | After skipped | Line cov. | Branch cov. | Mutations | Killed | Survived | No coverage | Mutation score |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Test model | Before disabling | Before tests | Before failures | Before errors | Disabling | After disabling | After skipped | Line cov. | Branch cov. | Mutations | Killed | Survived | No coverage | Mutation score |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         assert isinstance(row, dict)
@@ -357,12 +357,8 @@ def render_comparison_table(
                     markdown_cell(snapshot_dict.get("before_tests")),
                     markdown_cell(snapshot_dict.get("before_failures")),
                     markdown_cell(snapshot_dict.get("before_errors")),
-                    markdown_cell(snapshot_dict.get("before_skipped")),
                     markdown_cell(snapshot_dict.get("disabling_outcome")),
                     markdown_cell(snapshot_dict.get("after_disabling_status")),
-                    markdown_cell(snapshot_dict.get("after_tests")),
-                    markdown_cell(snapshot_dict.get("after_failures")),
-                    markdown_cell(snapshot_dict.get("after_errors")),
                     markdown_cell(snapshot_dict.get("after_skipped")),
                     percent_cell(snapshot_dict.get("line_coverage")),
                     percent_cell(snapshot_dict.get("branch_coverage")),
@@ -383,13 +379,11 @@ def render_summary_table(rows: list[object]) -> list[str]:
         "",
         "## Generation And Repair Summary",
         "",
-        "| Test model | Generation | Repair | Repair tries | Pipeline-disabled |",
-        "|---|---:|---:|---:|---:|",
+        "| Test model | Generation | Repair | Repair tries |",
+        "|---|---:|---:|---:|",
     ]
     for row in rows:
         assert isinstance(row, dict)
-        after_snapshot = row.get("after_repair")
-        after_snapshot_dict = after_snapshot if isinstance(after_snapshot, dict) else {}
         lines.append(
             "| "
             + " | ".join(
@@ -398,7 +392,6 @@ def render_summary_table(rows: list[object]) -> list[str]:
                     markdown_cell(row.get("generation_status")),
                     markdown_cell(row.get("repair_outcome")),
                     markdown_cell(row.get("repair_attempts")),
-                    markdown_cell(after_snapshot_dict.get("disabled_tests")),
                 ]
             )
             + " |"
