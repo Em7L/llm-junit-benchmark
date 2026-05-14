@@ -29,6 +29,14 @@ def validate_repair_did_not_drop_suite(previous: GeneratedTests, repaired: Gener
         )
 
 
+def compile_check_command(maven_cmd: list[str]) -> list[str] | None:
+    if not maven_cmd:
+        return None
+    if maven_cmd[-1] != "test":
+        return None
+    return [*maven_cmd[:-1], "test-compile"]
+
+
 def generate_tests(
     *,
     repo_dir: Path,
@@ -121,8 +129,18 @@ def generate_tests(
 
         staged_dir = stage_repo_with_tests(repo_dir, output_dir)
         try:
-            print(f"[tests] Verifying test suite with: {' '.join(maven_cmd)}")
-            result = run_maven_tests(staged_dir, maven_cmd)
+            compile_cmd = compile_check_command(maven_cmd)
+            if compile_cmd is not None:
+                print(f"[tests] Checking test compilation with: {' '.join(compile_cmd)}")
+                compile_result = run_maven_tests(staged_dir, compile_cmd)
+                if compile_result.status in {"test_compile_failure", "main_compile_failure"}:
+                    result = compile_result
+                else:
+                    print(f"[tests] Verifying test suite with: {' '.join(maven_cmd)}")
+                    result = run_maven_tests(staged_dir, maven_cmd)
+            else:
+                print(f"[tests] Verifying test suite with: {' '.join(maven_cmd)}")
+                result = run_maven_tests(staged_dir, maven_cmd)
             if first_verification_result is None:
                 first_verification_result = result
             repair_context = build_test_repair_prompt(

@@ -11,7 +11,7 @@ from typing import Sequence
 from benchmark_pipeline.evaluation import EvaluationOutcome, evaluate_repositories
 from benchmark_pipeline.evaluation.comparison_reports import write_comparison_reports
 from benchmark_pipeline.evaluation.runner import EvaluationRunConfig, EvaluationSuiteRun, run_evaluation
-from benchmark_pipeline.fs_utils import reset_directory
+from benchmark_pipeline.fs_utils import directories_match, reset_directory
 from benchmark_pipeline.generation.runner import (
     BaselineGenerationConfig,
     TestGenerationConfig,
@@ -124,6 +124,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
             suite_generated_tests={suite_names[model]: tests for model, tests in generated_tests.items()},
         )
     )
+    evaluations_by_suite = {run.suite_name: run.outcome for run in evaluations}
     initial_evaluations: dict[str, EvaluationOutcome] = {}
     for model, generated in generated_tests.items():
         if generated.repair_attempts == 0:
@@ -131,6 +132,13 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
         suite_name = suite_names[model]
         initial_suite_dir = initial_tests_root / suite_name
         if not initial_suite_dir.exists():
+            continue
+        final_suite_dir = config.tests_dir / suite_name
+        if final_suite_dir.exists() and directories_match(initial_suite_dir, final_suite_dir):
+            print(
+                f"[pipeline] Reusing final evaluation for `{model}` because the initial and final suites are identical."
+            )
+            initial_evaluations[suite_name] = evaluations_by_suite[suite_name]
             continue
         initial_evaluations[suite_name] = evaluate_repositories(
             baseline_repo=config.baseline_repo,

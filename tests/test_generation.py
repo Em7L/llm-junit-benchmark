@@ -157,7 +157,7 @@ class TestGenerationOrchestration(unittest.TestCase):
 
         self.assertIs(result, repaired)
         self.assertEqual(parse.call_count, 2)
-        self.assertEqual(run_maven_tests.call_count, 1)
+        self.assertEqual(run_maven_tests.call_count, 2)
         self.assertTrue((output_dir / "src/test/java/com/example/AppTest.java").exists())
 
     def test_generate_tests_fails_after_semantic_repair_budget_is_exhausted(self) -> None:
@@ -205,7 +205,10 @@ class TestGenerationOrchestration(unittest.TestCase):
 
         with (
             patch("benchmark_pipeline.generation.tests_generation.parse_structured_response", side_effect=[broken, repaired]) as parse,
-            patch("benchmark_pipeline.generation.tests_generation.run_maven_tests", side_effect=[failed_maven_result(), passed_maven_result()]) as run_maven_tests,
+            patch(
+                "benchmark_pipeline.generation.tests_generation.run_maven_tests",
+                side_effect=[failed_maven_result(), passed_maven_result(), passed_maven_result()],
+            ) as run_maven_tests,
             redirect_stdout(StringIO()),
         ):
             result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=1)
@@ -215,9 +218,44 @@ class TestGenerationOrchestration(unittest.TestCase):
         self.assertEqual(result.repair_attempts, 1)
         self.assertEqual(result.repair_reasons, ["verification_failure"])
         self.assertEqual(parse.call_count, 2)
-        self.assertEqual(run_maven_tests.call_count, 2)
+        self.assertEqual(run_maven_tests.call_count, 3)
         repair_prompt = parse.call_args_list[1].kwargs["user_input"]
         self.assertIn("class BrokenTest {}", repair_prompt)
+
+    def test_generate_tests_skips_full_test_when_test_compile_fails(self) -> None:
+        repo_dir = self.root / "repo"
+        repo_dir.mkdir()
+        output_dir = self.root / "generated-tests"
+        broken = GeneratedTests(
+            summary="broken tests",
+            files=[
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class BrokenTest {}")
+            ],
+        )
+        compile_failure = MavenResult(
+            label="repo",
+            exit_code=1,
+            status="test_compile_failure",
+            status_reason="Test sources did not compile.",
+            tests=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            failing_tests=[],
+            stdout="compile failed",
+            stderr="",
+        )
+
+        with (
+            patch("benchmark_pipeline.generation.tests_generation.parse_structured_response", return_value=broken),
+            patch("benchmark_pipeline.generation.tests_generation.run_maven_tests", return_value=compile_failure) as run_maven_tests,
+            redirect_stdout(StringIO()),
+        ):
+            result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=0)
+
+        self.assertIs(result, broken)
+        self.assertEqual(run_maven_tests.call_count, 1)
+        self.assertEqual(run_maven_tests.call_args_list[0].args[1], ["mvn", "test-compile"])
 
     def test_generate_tests_retries_repair_that_drops_existing_test_files(self) -> None:
         repo_dir = self.root / "repo"
@@ -251,7 +289,7 @@ class TestGenerationOrchestration(unittest.TestCase):
             ) as parse,
             patch(
                 "benchmark_pipeline.generation.tests_generation.run_maven_tests",
-                side_effect=[failed_maven_result(), failed_maven_result(), passed_maven_result()],
+                side_effect=[failed_maven_result(), failed_maven_result(), passed_maven_result(), passed_maven_result()],
             ) as run_maven_tests,
             redirect_stdout(StringIO()),
         ):
@@ -259,7 +297,7 @@ class TestGenerationOrchestration(unittest.TestCase):
 
         self.assertIs(result, complete_repair)
         self.assertEqual(parse.call_count, 3)
-        self.assertEqual(run_maven_tests.call_count, 3)
+        self.assertEqual(run_maven_tests.call_count, 4)
         self.assertTrue((output_dir / "src/test/java/com/example/AppTest.java").exists())
         self.assertTrue((output_dir / "src/test/java/com/example/ServiceTest.java").exists())
 
@@ -344,7 +382,10 @@ class TestGenerationOrchestration(unittest.TestCase):
 
         with (
             patch("benchmark_pipeline.generation.tests_generation.parse_structured_response", side_effect=[broken, repaired]),
-            patch("benchmark_pipeline.generation.tests_generation.run_maven_tests", side_effect=[initial_failure, improved_failure]),
+            patch(
+                "benchmark_pipeline.generation.tests_generation.run_maven_tests",
+                side_effect=[passed_maven_result(), initial_failure, passed_maven_result(), improved_failure],
+            ),
             redirect_stdout(StringIO()),
         ):
             result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=1)

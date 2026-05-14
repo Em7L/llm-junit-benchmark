@@ -87,6 +87,21 @@ def copy_tree_into(source_root: Path, destination_root: Path) -> None:
             shutil.copy2(path, target)
 
 
+def directories_match(left_root: Path, right_root: Path) -> bool:
+    if not left_root.exists() or not right_root.exists():
+        return False
+
+    left_files = sorted(path.relative_to(left_root).as_posix() for path in left_root.rglob("*") if path.is_file())
+    right_files = sorted(path.relative_to(right_root).as_posix() for path in right_root.rglob("*") if path.is_file())
+    if left_files != right_files:
+        return False
+
+    for rel in left_files:
+        if (left_root / rel).read_text(encoding="utf-8") != (right_root / rel).read_text(encoding="utf-8"):
+            return False
+    return True
+
+
 def stage_repo_with_tests(repo_root: Path, tests_root: Path) -> Path:
     staging_root = repo_root.parent / ".staging"
     staging_root.mkdir(parents=True, exist_ok=True)

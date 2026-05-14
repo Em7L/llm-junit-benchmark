@@ -401,6 +401,55 @@ class TestPipeline(unittest.TestCase):
         self.assertIn("`maven_status=test_failures`", comparison_markdown)
         self.assertIn("`maven_status=passed`", comparison_markdown)
 
+    def test_run_pipeline_reuses_final_evaluation_when_initial_and_final_suites_match(self) -> None:
+        config = self.config(("model-b",))
+        repaired_tests = GeneratedTests(
+            summary="tests",
+            files=[],
+            repair_outcome="repair_discarded_incomplete",
+            repair_attempts=1,
+            repair_reasons=["verification_failure"],
+        )
+        shared_outcome = evaluation_outcome(pitest_result(["mutant-1"]))
+
+        def generate_with_matching_dirs(generation_config) -> GeneratedTests:
+            assert generation_config.initial_output_dir is not None
+            generation_config.output_dir.mkdir(parents=True, exist_ok=True)
+            generation_config.initial_output_dir.mkdir(parents=True, exist_ok=True)
+            content = "class AppTest {}"
+            relative = Path("src/test/java/com/example/AppTest.java")
+            for root in (generation_config.output_dir, generation_config.initial_output_dir):
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content, encoding="utf-8")
+            return repaired_tests
+
+        with (
+            patch("benchmark_pipeline.pipeline.run_baseline_generation", return_value=generated_repo()),
+            patch("benchmark_pipeline.pipeline.run_test_generation", side_effect=generate_with_matching_dirs),
+            patch(
+                "benchmark_pipeline.pipeline.run_evaluation",
+                return_value=[
+                    EvaluationSuiteRun(
+                        suite_name="model-b",
+                        suite_dir=config.tests_dir / "model-b",
+                        report_json=config.report_json.parent / "model-b_report.json",
+                        report_md=config.report_md.parent / "model-b_report.md",
+                        pitest_report_dir=config.pitest_report_dir / "model-b",
+                        outcome=shared_outcome,
+                    )
+                ],
+            ),
+            patch("benchmark_pipeline.pipeline.evaluate_repositories") as evaluate_repositories,
+            redirect_stdout(StringIO()),
+        ):
+            run_pipeline(config)
+
+        evaluate_repositories.assert_not_called()
+        comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
+        row = comparison["rows"][0]
+        self.assertEqual(row["before_repair"], row["after_repair"])
+
     def test_comparison_report_marks_different_mutant_sets(self) -> None:
         config = self.config(("model-b", "model-c"))
         model_b_outcome = evaluation_outcome(pitest_result(["mutant-1", "mutant-2"]))
