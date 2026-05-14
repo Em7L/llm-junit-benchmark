@@ -137,8 +137,8 @@ def build_test_prompt(repo_root: Path) -> str:
         Generate a JUnit 5 test suite for this Maven/JDK21 project.
 
         Requirements:
-        - Return only repository-relative test files to add to the repo.
-        - Put tests under `src/test/java`.
+        - Return ONLY Java test files under `src/test/java`.
+        - DO NOT return production files (`src/main/java/...`), `pom.xml`, or `README.md` in the response.
         - Do not modify production code.
         - Assume `pom.xml` already contains JUnit 5 and Surefire.
         - Ensure the test files compile against the provided repository as-is.
@@ -175,7 +175,8 @@ def build_test_repair_prompt(repo_root: Path, build_output: str) -> str:
         Return a corrected test suite.
 
         Requirements:
-        - Return only repository-relative test files to add/update in the repo.
+        - Return ONLY Java test files under `src/test/java` to add/update in the repo.
+        - DO NOT return production files (`src/main/java/...`), `pom.xml`, or `README.md` in the response.
         - Return the complete repaired test suite, including unchanged test files.
         - Do not return only the modified file.
         - Fix all compilation errors, import issues, and test failures.
