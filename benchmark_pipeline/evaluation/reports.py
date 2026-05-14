@@ -4,7 +4,31 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from benchmark_pipeline.models import JacocoCoverage, MavenResult, PitestResult
+from benchmark_pipeline.classifications import (
+    DISABLING_CLASSIFICATIONS,
+    REPAIR_CLASSIFICATIONS,
+    classify_disabling,
+    selected_definitions,
+)
+from benchmark_pipeline.models import GeneratedTests, JacocoCoverage, MavenResult, PitestResult
+
+
+def _append_maven_result(lines: list[str], result: MavenResult) -> None:
+    lines.extend(
+        [
+            f"- Passed: `{result.passed}`",
+            f"- Run status: `{result.status}`",
+            f"- Exit code: `{result.exit_code}`",
+            f"- Tests: `{result.tests}`",
+            f"- Failures: `{result.failures}`",
+            f"- Errors: `{result.errors}`",
+            f"- Skipped: `{result.skipped}`",
+        ]
+    )
+    if result.status_reason:
+        lines.append(f"- Status reason: {result.status_reason}")
+    if result.failing_tests:
+        lines.append(f"- Failing tests: `{len(result.failing_tests)}`")
 
 
 def markdown_report(
@@ -13,35 +37,63 @@ def markdown_report(
     pitest_result: PitestResult | None,
     disabled_tests: list[str] | None = None,
     initial_baseline_result: MavenResult | None = None,
+    generated_tests: GeneratedTests | None = None,
 ) -> str:
+    disable_status = classify_disabling(
+        baseline_result=baseline_result,
+        disabled_tests=disabled_tests,
+        initial_baseline_result=initial_baseline_result,
+    )
     lines = [
         "# Mutation Evaluation Report",
         "",
-        "## Baseline Repository",
-        f"- Passed: `{baseline_result.passed}`",
-        f"- Run status: `{baseline_result.status}`",
-        f"- Exit code: `{baseline_result.exit_code}`",
-        f"- Tests: `{baseline_result.tests}`",
-        f"- Failures: `{baseline_result.failures}`",
-        f"- Errors: `{baseline_result.errors}`",
-        f"- Skipped: `{baseline_result.skipped}`",
     ]
-    if baseline_result.status_reason:
-        lines.append(f"- Status reason: {baseline_result.status_reason}")
-    if baseline_result.failing_tests:
-        lines.append(f"- Baseline failing tests: `{len(baseline_result.failing_tests)}`")
+    if generated_tests is not None:
+        lines.extend(
+            [
+                "## Test Generation Repair",
+                f"- Repair outcome: `{generated_tests.repair_outcome}`",
+                f"- Repair attempts: `{generated_tests.repair_attempts}`",
+                f"- Repair reasons: `{', '.join(generated_tests.repair_reasons) if generated_tests.repair_reasons else 'none'}`",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+        "## Initial Baseline Validation",
+        ]
+    )
+    _append_maven_result(lines, initial_baseline_result or baseline_result)
     if initial_baseline_result is not None:
         lines.extend(
             [
                 "",
-                "## Baseline Test Cleaning",
-                f"- Initial run status: `{initial_baseline_result.status}`",
+                "## Baseline-Failing Test Disabling",
+                "- Disabling applied: `True`",
+                f"- Disabling outcome: `{disable_status}`",
                 f"- Initial failing tests: `{len(initial_baseline_result.failing_tests)}`",
                 f"- Disabled generated test methods: `{len(disabled_tests or [])}`",
             ]
         )
         for test_id in disabled_tests or []:
             lines.append(f"- `{test_id}`")
+    else:
+        lines.extend(
+            [
+                "",
+                "## Baseline-Failing Test Disabling",
+                "- Disabling applied: `False`",
+                f"- Disabling outcome: `{disable_status}`",
+                "- Disabled generated test methods: `0`",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Final Baseline Validation",
+        ]
+    )
+    _append_maven_result(lines, baseline_result)
     lines.extend(
         [
             "",
@@ -65,7 +117,10 @@ def markdown_report(
         ]
     )
     if pitest_result is None:
-        lines.append("- PIT was skipped because the final baseline test suite did not pass.")
+        if baseline_result.passed:
+            lines.append("- PIT result not available.")
+        else:
+            lines.append("- PIT was skipped because the final baseline test suite did not pass.")
     else:
         lines.extend(
             [
@@ -96,6 +151,17 @@ def markdown_report(
                 "- PIT mutation testing requires a green baseline test suite, so mutation scoring was skipped.",
             ]
         )
+    classification_names = [disable_status]
+    if generated_tests is not None:
+        classification_names.append(generated_tests.repair_outcome)
+    repair_definitions = selected_definitions(REPAIR_CLASSIFICATIONS, classification_names)
+    disabling_definitions = selected_definitions(DISABLING_CLASSIFICATIONS, classification_names)
+    if repair_definitions or disabling_definitions:
+        lines.extend(["", "## Classification Definitions"])
+        for name, description in repair_definitions:
+            lines.append(f"- `{name}`: {description}")
+        for name, description in disabling_definitions:
+            lines.append(f"- `{name}`: {description}")
     return "\n".join(lines)
 
 

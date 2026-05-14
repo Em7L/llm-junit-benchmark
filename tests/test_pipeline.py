@@ -21,7 +21,7 @@ def generated_repo() -> GeneratedRepo:
 
 
 def generated_tests() -> GeneratedTests:
-    return GeneratedTests(summary="tests", files=[])
+    return GeneratedTests(summary="tests", files=[], repair_outcome="repair_not_needed", repair_attempts=0)
 
 
 def passed_maven() -> MavenResult:
@@ -40,12 +40,19 @@ def passed_maven() -> MavenResult:
     )
 
 
-def evaluation_outcome(pitest_result: PitestResult | None = None) -> EvaluationOutcome:
+def evaluation_outcome(
+    pitest_result: PitestResult | None = None,
+    *,
+    baseline_result: MavenResult | None = None,
+    initial_baseline_result: MavenResult | None = None,
+    disabled_tests: list[str] | None = None,
+) -> EvaluationOutcome:
     return EvaluationOutcome(
-        baseline_result=passed_maven(),
+        baseline_result=baseline_result or passed_maven(),
         baseline_coverage=None,
         pitest_result=pitest_result,
-        disabled_tests=[],
+        disabled_tests=disabled_tests or [],
+        initial_baseline_result=initial_baseline_result,
     )
 
 
@@ -246,6 +253,143 @@ class TestPipeline(unittest.TestCase):
         )
         comparison_markdown = (config.report_md.parent / "comparison_report.md").read_text(encoding="utf-8")
         self.assertIn("Identical mutant IDs across suites: `True`", comparison_markdown)
+
+    def test_comparison_report_includes_initial_status_and_cleaning_outcome(self) -> None:
+        config = self.config(("model-b",))
+        initial = MavenResult(
+            label="repo",
+            exit_code=1,
+            status="test_failures",
+            status_reason="One or more tests failed.",
+            tests=3,
+            failures=1,
+            errors=0,
+            skipped=0,
+            failing_tests=["com.example.AppTest#failsOnBaseline"],
+            stdout="",
+            stderr="",
+        )
+        final = MavenResult(
+            label="repo",
+            exit_code=0,
+            status="passed",
+            status_reason=None,
+            tests=3,
+            failures=0,
+            errors=0,
+            skipped=1,
+            failing_tests=[],
+            stdout="",
+            stderr="",
+        )
+        outcome = evaluation_outcome(
+            pitest_result(["mutant-1"]),
+            baseline_result=final,
+            initial_baseline_result=initial,
+            disabled_tests=["com.example.AppTest#failsOnBaseline"],
+        )
+
+        with (
+            patch("benchmark_pipeline.pipeline.run_baseline_generation", return_value=generated_repo()),
+            patch("benchmark_pipeline.pipeline.run_test_generation", return_value=generated_tests()),
+            patch(
+                "benchmark_pipeline.pipeline.run_evaluation",
+                return_value=[
+                    EvaluationSuiteRun(
+                        suite_name="model-b",
+                        suite_dir=config.tests_dir / "model-b",
+                        report_json=config.report_json.parent / "model-b_report.json",
+                        report_md=config.report_md.parent / "model-b_report.md",
+                        pitest_report_dir=config.pitest_report_dir / "model-b",
+                        outcome=outcome,
+                    )
+                ],
+            ),
+            redirect_stdout(StringIO()),
+        ):
+            run_pipeline(config)
+
+        comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
+        row = comparison["rows"][0]
+        self.assertEqual(row["repair_outcome"], "repair_not_needed")
+        self.assertEqual(row["repair_attempts"], 0)
+        self.assertEqual(row["initial_evaluation_status"], "test_failures")
+        self.assertEqual(row["disabling_outcome"], "disabling_applied_successful")
+
+    def test_run_pipeline_records_before_repair_evaluation_when_repairs_were_attempted(self) -> None:
+        config = self.config(("model-b",))
+        repaired_tests = GeneratedTests(
+            summary="tests",
+            files=[],
+            repair_outcome="repair_successful",
+            repair_attempts=1,
+            repair_reasons=["verification_failure"],
+        )
+        before_outcome = evaluation_outcome(
+            pitest_result(["mutant-1"]),
+            baseline_result=MavenResult(
+                label="repo",
+                exit_code=0,
+                status="passed",
+                status_reason=None,
+                tests=2,
+                failures=0,
+                errors=0,
+                skipped=1,
+                failing_tests=[],
+                stdout="",
+                stderr="",
+            ),
+            initial_baseline_result=MavenResult(
+                label="repo",
+                exit_code=1,
+                status="test_failures",
+                status_reason="One or more tests failed.",
+                tests=2,
+                failures=1,
+                errors=0,
+                skipped=0,
+                failing_tests=["com.example.AppTest#failsOnBaseline"],
+                stdout="",
+                stderr="",
+            ),
+            disabled_tests=["com.example.AppTest#failsOnBaseline"],
+        )
+
+        def generate_with_initial_dir(generation_config) -> GeneratedTests:
+            assert generation_config.initial_output_dir is not None
+            generation_config.initial_output_dir.mkdir(parents=True, exist_ok=True)
+            return repaired_tests
+
+        with (
+            patch("benchmark_pipeline.pipeline.run_baseline_generation", return_value=generated_repo()),
+            patch("benchmark_pipeline.pipeline.run_test_generation", side_effect=generate_with_initial_dir),
+            patch(
+                "benchmark_pipeline.pipeline.run_evaluation",
+                return_value=[
+                    EvaluationSuiteRun(
+                        suite_name="model-b",
+                        suite_dir=config.tests_dir / "model-b",
+                        report_json=config.report_json.parent / "model-b_report.json",
+                        report_md=config.report_md.parent / "model-b_report.md",
+                        pitest_report_dir=config.pitest_report_dir / "model-b",
+                        outcome=evaluation_outcome(pitest_result(["mutant-1"])),
+                    )
+                ],
+            ),
+            patch("benchmark_pipeline.pipeline.evaluate_repositories", return_value=before_outcome),
+            redirect_stdout(StringIO()),
+        ):
+            run_pipeline(config)
+
+        comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
+        row = comparison["rows"][0]
+        self.assertEqual(row["before_repair"]["initial_evaluation_status"], "test_failures")
+        self.assertEqual(row["before_repair"]["disabling_outcome"], "disabling_applied_successful")
+        self.assertEqual(row["after_repair"]["evaluation_status"], "passed")
+        comparison_markdown = (config.report_md.parent / "comparison_report.md").read_text(encoding="utf-8")
+        self.assertIn("## Before Repair And Disabling", comparison_markdown)
+        self.assertIn("## After Repair And Disabling", comparison_markdown)
 
     def test_comparison_report_marks_different_mutant_sets(self) -> None:
         config = self.config(("model-b", "model-c"))

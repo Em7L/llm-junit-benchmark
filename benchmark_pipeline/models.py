@@ -22,6 +22,9 @@ class GeneratedTests(BaseModel):
     summary: str
     files: list[FileArtifact]
     assumptions: list[str] = Field(default_factory=list)
+    repair_attempts: int = 0
+    repair_outcome: str = "repair_not_needed"
+    repair_reasons: list[str] = Field(default_factory=list)
 
 
 @dataclass

@@ -74,6 +74,7 @@ class TestGenerationRunner(unittest.TestCase):
             model="test-model",
             manifest_path=self.root / "manifests/tests.json",
             max_repairs=4,
+            initial_output_dir=self.root / "tests-initial",
         )
 
         with (
@@ -88,6 +89,7 @@ class TestGenerationRunner(unittest.TestCase):
         self.assertEqual(generate_tests.call_args.kwargs["repo_dir"], self.root / "baseline")
         self.assertEqual(generate_tests.call_args.kwargs["output_dir"], self.root / "tests")
         self.assertEqual(generate_tests.call_args.kwargs["max_repairs"], 4)
+        self.assertEqual(generate_tests.call_args.kwargs["initial_output_dir"], self.root / "tests-initial")
 
 
 if __name__ == "__main__":

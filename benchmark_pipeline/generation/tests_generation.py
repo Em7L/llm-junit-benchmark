@@ -5,10 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 import shutil
 
+from benchmark_pipeline.classifications import classify_repair
 from benchmark_pipeline.fs_utils import reset_directory, write_artifacts, stage_repo_with_tests
 from benchmark_pipeline.tools.llm import parse_structured_response
 from benchmark_pipeline.tools.maven import run_maven_tests
-from benchmark_pipeline.models import GeneratedTests
+from benchmark_pipeline.models import GeneratedTests, MavenResult
 from benchmark_pipeline.generation.prompts import build_test_prompt, build_test_repair_prompt
 from benchmark_pipeline.generation.validation import OutputValidationError, validate_generated_tests
 
@@ -28,7 +29,15 @@ def validate_repair_did_not_drop_suite(previous: GeneratedTests, repaired: Gener
         )
 
 
-def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs: int = 2, maven_cmd: list[str] | None = None) -> GeneratedTests:
+def generate_tests(
+    *,
+    repo_dir: Path,
+    output_dir: Path,
+    model: str,
+    max_repairs: int = 2,
+    maven_cmd: list[str] | None = None,
+    initial_output_dir: Path | None = None,
+) -> GeneratedTests:
     if not repo_dir.exists():
         raise FileNotFoundError(f"Repository not found: {repo_dir}")
     if maven_cmd is None:
@@ -50,6 +59,11 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
         ),
         user_input=build_test_prompt(repo_dir),
     )
+    repair_attempts = 0
+    repair_reasons: list[str] = []
+    final_repair_discarded = False
+    first_verification_result: MavenResult | None = None
+    initial_snapshot_written = False
 
     for attempt in range(max_repairs + 1):
         print()
@@ -68,6 +82,8 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
                 f"Requesting repair attempt {attempt + 1}/{max_repairs}"
             )
             previous = parsed
+            repair_attempts += 1
+            repair_reasons.append("semantic_validation")
             parsed = parse_structured_response(
                 model=model,
                 schema=GeneratedTests,
@@ -92,6 +108,12 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
                 parsed = previous
             continue
 
+        if attempt == 0 and initial_output_dir is not None and not initial_snapshot_written:
+            print(f"[tests] Writing initial generated suite snapshot to {initial_output_dir.resolve()}")
+            reset_directory(initial_output_dir)
+            write_artifacts(initial_output_dir, parsed.files)
+            initial_snapshot_written = True
+
         print(f"[tests] Writing generated tests to {output_dir.resolve()}")
         reset_directory(output_dir)
         write_artifacts(output_dir, parsed.files)
@@ -101,6 +123,8 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
         try:
             print(f"[tests] Verifying test suite with: {' '.join(maven_cmd)}")
             result = run_maven_tests(staged_dir, maven_cmd)
+            if first_verification_result is None:
+                first_verification_result = result
             repair_context = build_test_repair_prompt(
                 repo_root=staged_dir,
                 build_output=f"{result.stdout}\n{result.stderr}".strip(),
@@ -111,6 +135,14 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
 
         if result.passed:
             print("[tests] Verification passed. Test suite is valid.")
+            parsed.repair_attempts = repair_attempts
+            parsed.repair_reasons = repair_reasons
+            parsed.repair_outcome = classify_repair(
+                repair_attempts=repair_attempts,
+                first_verification_result=first_verification_result,
+                final_verification_result=result,
+                final_repair_discarded=final_repair_discarded,
+            )
             return parsed
 
         if attempt == max_repairs:
@@ -123,6 +155,8 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
             f"Requesting repair attempt {attempt + 1}/{max_repairs}"
         )
         previous = parsed
+        repair_attempts += 1
+        repair_reasons.append("verification_failure")
         parsed = parse_structured_response(
             model=model,
             schema=GeneratedTests,
@@ -142,9 +176,18 @@ def generate_tests(*, repo_dir: Path, output_dir: Path, model: str, max_repairs:
                     "Keeping the last complete generated suite for evaluation."
                 )
                 parsed = previous
+                final_repair_discarded = True
                 break
             print(f"[tests] Repair response was incomplete ({exc}). Requesting another repair.")
             parsed = previous
 
+    parsed.repair_attempts = repair_attempts
+    parsed.repair_reasons = repair_reasons
+    parsed.repair_outcome = classify_repair(
+        repair_attempts=repair_attempts,
+        first_verification_result=first_verification_result,
+        final_verification_result=result,
+        final_repair_discarded=final_repair_discarded,
+    )
     return parsed
 

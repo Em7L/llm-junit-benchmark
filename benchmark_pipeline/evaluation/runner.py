@@ -8,6 +8,7 @@ from typing import Sequence
 
 from benchmark_pipeline.evaluation import EvaluationOutcome, evaluate_repositories, write_evaluation_json
 from benchmark_pipeline.evaluation.reports import markdown_report
+from benchmark_pipeline.models import GeneratedTests
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,7 @@ class EvaluationRunConfig:
     report_md: Path
     pitest_report_dir: Path
     maven_cmd: Sequence[str]
+    suite_generated_tests: dict[str, GeneratedTests] | None = None
 
 
 @dataclass(frozen=True)
@@ -65,7 +67,8 @@ def run_evaluation(config: EvaluationRunConfig) -> list[EvaluationSuiteRun]:
             maven_cmd=config.maven_cmd,
             pitest_report_dir=pitest_report_dir,
         )
-        write_evaluation_reports(report_json, report_md, outcome)
+        generated_tests = config.suite_generated_tests.get(suite_name) if config.suite_generated_tests is not None else None
+        write_evaluation_reports(report_json, report_md, outcome, generated_tests)
         print_evaluation_summary(suite_name, report_json, report_md, outcome)
 
         runs.append(
@@ -82,7 +85,12 @@ def run_evaluation(config: EvaluationRunConfig) -> list[EvaluationSuiteRun]:
     return runs
 
 
-def write_evaluation_reports(report_json: Path, report_md: Path, outcome: EvaluationOutcome) -> None:
+def write_evaluation_reports(
+    report_json: Path,
+    report_md: Path,
+    outcome: EvaluationOutcome,
+    generated_tests: GeneratedTests | None = None,
+) -> None:
     print(f"[evaluation] Writing JSON report to {report_json.resolve()}")
     write_evaluation_json(report_json, outcome)
     report_md.parent.mkdir(parents=True, exist_ok=True)
@@ -94,6 +102,7 @@ def write_evaluation_reports(report_json: Path, report_md: Path, outcome: Evalua
             outcome.pitest_result,
             outcome.disabled_tests,
             outcome.initial_baseline_result,
+            generated_tests,
         ),
         encoding="utf-8",
     )
