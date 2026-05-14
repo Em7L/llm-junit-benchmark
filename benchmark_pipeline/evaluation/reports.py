@@ -6,6 +6,7 @@ from dataclasses import asdict
 
 from benchmark_pipeline.classifications import (
     DISABLING_CLASSIFICATIONS,
+    MAVEN_STATUS_CLASSIFICATIONS,
     REPAIR_CLASSIFICATIONS,
     classify_disabling,
     selected_definitions,
@@ -154,12 +155,18 @@ def markdown_report(
     classification_names = [disable_status]
     if generated_tests is not None:
         classification_names.append(generated_tests.repair_outcome)
+    maven_status_names = [baseline_result.status]
+    if initial_baseline_result is not None:
+        maven_status_names.append(initial_baseline_result.status)
     repair_definitions = selected_definitions(REPAIR_CLASSIFICATIONS, classification_names)
     disabling_definitions = selected_definitions(DISABLING_CLASSIFICATIONS, classification_names)
-    if repair_definitions or disabling_definitions:
+    maven_status_definitions = selected_definitions(MAVEN_STATUS_CLASSIFICATIONS, maven_status_names)
+    if repair_definitions or disabling_definitions or maven_status_definitions:
         lines.extend(["", "## Classification Definitions"])
         for name, description in repair_definitions:
             lines.append(f"- `{name}`: {description}")
+        for name, description in maven_status_definitions:
+            lines.append(f"- `maven_status={name}`: {description}")
         for name, description in disabling_definitions:
             lines.append(f"- `{name}`: {description}")
     return "\n".join(lines)

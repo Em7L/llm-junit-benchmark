@@ -6,6 +6,8 @@ from pathlib import Path
 
 from benchmark_pipeline.classifications import (
     DISABLING_CLASSIFICATIONS,
+    GENERATION_CLASSIFICATIONS,
+    MAVEN_STATUS_CLASSIFICATIONS,
     REPAIR_CLASSIFICATIONS,
     classify_disabling,
     selected_definitions,
@@ -93,6 +95,8 @@ def comparison_payload(
         outcome = run.outcome
         coverage = outcome.baseline_coverage
         pitest = outcome.pitest_result
+        before_snapshot = evaluation_snapshot(initial_outcome)
+        after_snapshot = evaluation_snapshot(outcome)
         rows.append(
             {
                 "test_model": model,
@@ -125,8 +129,8 @@ def comparison_payload(
                 "mutation_score": pitest.mutation_score if pitest is not None else None,
                 "report_json": run.report_json.as_posix(),
                 "report_md": run.report_md.as_posix(),
-                "before_repair": evaluation_snapshot(initial_outcome),
-                "after_repair": evaluation_snapshot(outcome),
+                "before_repair": before_snapshot or after_snapshot,
+                "after_repair": after_snapshot,
             }
         )
 
@@ -147,20 +151,24 @@ def evaluation_snapshot(outcome: object | None) -> dict[str, object] | None:
 
     coverage = outcome.baseline_coverage
     pitest = outcome.pitest_result
-    initial_status = outcome.initial_baseline_result.status if outcome.initial_baseline_result is not None else outcome.baseline_result.status
+    before_result = outcome.initial_baseline_result or outcome.baseline_result
     disabling = classify_disabling(
         baseline_result=outcome.baseline_result,
         disabled_tests=outcome.disabled_tests,
         initial_baseline_result=outcome.initial_baseline_result,
     )
     return {
-        "initial_evaluation_status": initial_status,
+        "before_disabling_status": before_result.status,
+        "before_tests": before_result.tests,
+        "before_failures": before_result.failures,
+        "before_errors": before_result.errors,
+        "before_skipped": before_result.skipped,
         "disabling_outcome": disabling,
-        "evaluation_status": outcome.baseline_result.status,
-        "tests": outcome.baseline_result.tests,
-        "failures": outcome.baseline_result.failures,
-        "errors": outcome.baseline_result.errors,
-        "skipped": outcome.baseline_result.skipped,
+        "after_disabling_status": outcome.baseline_result.status,
+        "after_tests": outcome.baseline_result.tests,
+        "after_failures": outcome.baseline_result.failures,
+        "after_errors": outcome.baseline_result.errors,
+        "after_skipped": outcome.baseline_result.skipped,
         "disabled_tests": len(outcome.disabled_tests),
         "line_coverage": coverage.line_rate if coverage is not None else None,
         "branch_coverage": coverage.branch_rate if coverage is not None else None,
@@ -227,21 +235,20 @@ def comparison_markdown(payload: dict[str, object]) -> str:
         f"- Repository model: `{payload['repo_model']}`",
         f"- Baseline repository: `{payload['baseline_repo']}`",
     ]
+    lines.extend(render_summary_table(rows))
     lines.extend(
         render_comparison_table(
-            title="Before Repair And Disabling",
+            title="Initial Generated Suite",
             rows=rows,
             snapshot_key="before_repair",
-            include_repair_columns=True,
         )
     )
     if has_repair_attempts:
         lines.extend(
             render_comparison_table(
-                title="After Repair And Disabling",
+                title="Final Repaired Suite",
                 rows=rows,
                 snapshot_key="after_repair",
-                include_repair_columns=True,
             )
         )
 
@@ -272,17 +279,53 @@ def comparison_markdown(payload: dict[str, object]) -> str:
         for row in rows
         if isinstance(row, dict) and isinstance(row.get("repair_outcome"), str)
     ]
+    generation_names = [
+        row.get("generation_status")
+        for row in rows
+        if isinstance(row, dict) and isinstance(row.get("generation_status"), str)
+    ]
     disabling_names = [
         row.get("disabling_outcome")
         for row in rows
         if isinstance(row, dict) and isinstance(row.get("disabling_outcome"), str)
     ]
+    maven_status_names = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for key in ("before_repair", "after_repair"):
+            snapshot = row.get(key)
+            if not isinstance(snapshot, dict):
+                continue
+            for status_key in ("before_disabling_status", "after_disabling_status"):
+                status = snapshot.get(status_key)
+                if isinstance(status, str):
+                    maven_status_names.append(status)
+
+        status = row.get("evaluation_status")
+        if isinstance(status, str):
+            maven_status_names.append(status)
+
+        initial_status = row.get("initial_evaluation_status")
+        if isinstance(initial_status, str):
+            maven_status_names.append(initial_status)
+
+        missing_status = row.get("generation_status") == "passed" and row.get("evaluation_status") == "missing"
+        if missing_status:
+            maven_status_names.append("missing")
+
+    generation_definitions = selected_definitions(GENERATION_CLASSIFICATIONS, generation_names)
     repair_definitions = selected_definitions(REPAIR_CLASSIFICATIONS, repair_names)
     disabling_definitions = selected_definitions(DISABLING_CLASSIFICATIONS, disabling_names)
-    if repair_definitions or disabling_definitions:
+    maven_status_definitions = selected_definitions(MAVEN_STATUS_CLASSIFICATIONS, maven_status_names)
+    if generation_definitions or repair_definitions or disabling_definitions or maven_status_definitions:
         lines.extend(["", "## Classification Definitions"])
+        for name, description in generation_definitions:
+            lines.append(f"- `generation={name}`: {description}")
         for name, description in repair_definitions:
             lines.append(f"- `{name}`: {description}")
+        for name, description in maven_status_definitions:
+            lines.append(f"- `maven_status={name}`: {description}")
         for name, description in disabling_definitions:
             lines.append(f"- `{name}`: {description}")
     return "\n".join(lines)
@@ -293,13 +336,12 @@ def render_comparison_table(
     title: str,
     rows: list[object],
     snapshot_key: str,
-    include_repair_columns: bool,
 ) -> list[str]:
     lines = [
         "",
         f"## {title}",
         "",
-        "| Test model | Generation | Repair | Repair tries | Initial eval. | Disabling | Final eval. | Tests | Failures | Errors | Skipped | Disabled | Line cov. | Branch cov. | Mutations | Killed | Survived | No coverage | Mutation score |",
+        "| Test model | Before disabling | Before tests | Before failures | Before errors | Before skipped | Disabling | After disabling | After tests | After failures | After errors | After skipped | Line cov. | Branch cov. | Mutations | Killed | Survived | No coverage | Mutation score |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
@@ -311,17 +353,17 @@ def render_comparison_table(
             + " | ".join(
                 [
                     markdown_cell(row.get("test_model")),
-                    markdown_cell(row.get("generation_status")),
-                    markdown_cell(row.get("repair_outcome")) if include_repair_columns else "N/A",
-                    markdown_cell(row.get("repair_attempts")) if include_repair_columns else "N/A",
-                    markdown_cell(snapshot_dict.get("initial_evaluation_status")),
+                    markdown_cell(snapshot_dict.get("before_disabling_status")),
+                    markdown_cell(snapshot_dict.get("before_tests")),
+                    markdown_cell(snapshot_dict.get("before_failures")),
+                    markdown_cell(snapshot_dict.get("before_errors")),
+                    markdown_cell(snapshot_dict.get("before_skipped")),
                     markdown_cell(snapshot_dict.get("disabling_outcome")),
-                    markdown_cell(snapshot_dict.get("evaluation_status")),
-                    markdown_cell(snapshot_dict.get("tests")),
-                    markdown_cell(snapshot_dict.get("failures")),
-                    markdown_cell(snapshot_dict.get("errors")),
-                    markdown_cell(snapshot_dict.get("skipped")),
-                    markdown_cell(snapshot_dict.get("disabled_tests")),
+                    markdown_cell(snapshot_dict.get("after_disabling_status")),
+                    markdown_cell(snapshot_dict.get("after_tests")),
+                    markdown_cell(snapshot_dict.get("after_failures")),
+                    markdown_cell(snapshot_dict.get("after_errors")),
+                    markdown_cell(snapshot_dict.get("after_skipped")),
                     percent_cell(snapshot_dict.get("line_coverage")),
                     percent_cell(snapshot_dict.get("branch_coverage")),
                     markdown_cell(snapshot_dict.get("total_mutations")),
@@ -329,6 +371,34 @@ def render_comparison_table(
                     markdown_cell(snapshot_dict.get("survived")),
                     markdown_cell(snapshot_dict.get("no_coverage")),
                     percent_cell(snapshot_dict.get("mutation_score")),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
+def render_summary_table(rows: list[object]) -> list[str]:
+    lines = [
+        "",
+        "## Generation And Repair Summary",
+        "",
+        "| Test model | Generation | Repair | Repair tries | Pipeline-disabled |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        assert isinstance(row, dict)
+        after_snapshot = row.get("after_repair")
+        after_snapshot_dict = after_snapshot if isinstance(after_snapshot, dict) else {}
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    markdown_cell(row.get("test_model")),
+                    markdown_cell(row.get("generation_status")),
+                    markdown_cell(row.get("repair_outcome")),
+                    markdown_cell(row.get("repair_attempts")),
+                    markdown_cell(after_snapshot_dict.get("disabled_tests")),
                 ]
             )
             + " |"

@@ -5,6 +5,13 @@ from __future__ import annotations
 from benchmark_pipeline.models import MavenResult
 
 
+GENERATION_CLASSIFICATIONS: dict[str, str] = {
+    "passed": "The test-generation step produced a suite artifact that the pipeline accepted for downstream evaluation.",
+    "failed": "The test-generation step did not produce an accepted suite artifact for downstream evaluation.",
+    "missing": "The pipeline expected a generated suite outcome here, but no accepted suite artifact was available.",
+}
+
+
 REPAIR_CLASSIFICATIONS: dict[str, str] = {
     "repair_not_needed": "The initial generated test suite already passed verification, so no repair attempt was needed.",
     "repair_successful": "One or more repair attempts were applied and the final generated test suite passed verification.",
@@ -12,6 +19,17 @@ REPAIR_CLASSIFICATIONS: dict[str, str] = {
     "repair_no_improvement": "One or more repair attempts were applied, but the final generated test suite did not verify any better than the first verifiable suite.",
     "repair_regressed": "One or more repair attempts were applied and the final generated test suite verified worse than the first verifiable suite.",
     "repair_discarded_incomplete": "A repair response was rejected because it returned an incomplete suite, and the pipeline kept the last complete suite instead.",
+}
+
+
+MAVEN_STATUS_CLASSIFICATIONS: dict[str, str] = {
+    "passed": "The Maven validation run completed successfully with no remaining failing or errored tests.",
+    "test_failures": "The tests compiled and ran, but at least one test assertion failed.",
+    "test_execution_failure": "The tests compiled, but the Maven test execution phase failed before a normal passing/failing outcome was completed.",
+    "test_compile_failure": "The generated or existing test sources did not compile during Maven test validation.",
+    "main_compile_failure": "The main production sources did not compile during Maven validation.",
+    "maven_failure": "The Maven run failed for a broader build reason that was not classified as a main-compile, test-compile, or ordinary test-failure outcome.",
+    "missing": "The pipeline expected an evaluation result here, but no evaluation outcome was available.",
 }
 
 

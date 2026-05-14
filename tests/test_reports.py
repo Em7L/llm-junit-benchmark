@@ -53,6 +53,8 @@ class TestReports(unittest.TestCase):
         self.assertIn("## Final Baseline Validation", report)
         self.assertIn("## Classification Definitions", report)
         self.assertIn("`repair_successful`", report)
+        self.assertIn("`maven_status=test_failures`", report)
+        self.assertIn("`maven_status=passed`", report)
         self.assertIn("`disabling_applied_successful`", report)
         self.assertNotIn("final baseline test suite did not pass", report)
 

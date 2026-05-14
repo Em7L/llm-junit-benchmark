@@ -315,6 +315,9 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(row["repair_attempts"], 0)
         self.assertEqual(row["initial_evaluation_status"], "test_failures")
         self.assertEqual(row["disabling_outcome"], "disabling_applied_successful")
+        self.assertEqual(row["before_repair"]["before_failures"], 1)
+        self.assertEqual(row["before_repair"]["after_failures"], 0)
+        self.assertEqual(row["before_repair"]["after_skipped"], 1)
 
     def test_run_pipeline_records_before_repair_evaluation_when_repairs_were_attempted(self) -> None:
         config = self.config(("model-b",))
@@ -384,12 +387,19 @@ class TestPipeline(unittest.TestCase):
 
         comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
         row = comparison["rows"][0]
-        self.assertEqual(row["before_repair"]["initial_evaluation_status"], "test_failures")
+        self.assertEqual(row["before_repair"]["before_disabling_status"], "test_failures")
+        self.assertEqual(row["before_repair"]["before_failures"], 1)
         self.assertEqual(row["before_repair"]["disabling_outcome"], "disabling_applied_successful")
-        self.assertEqual(row["after_repair"]["evaluation_status"], "passed")
+        self.assertEqual(row["after_repair"]["after_disabling_status"], "passed")
         comparison_markdown = (config.report_md.parent / "comparison_report.md").read_text(encoding="utf-8")
-        self.assertIn("## Before Repair And Disabling", comparison_markdown)
-        self.assertIn("## After Repair And Disabling", comparison_markdown)
+        self.assertIn("## Generation And Repair Summary", comparison_markdown)
+        self.assertIn("## Initial Generated Suite", comparison_markdown)
+        self.assertIn("## Final Repaired Suite", comparison_markdown)
+        self.assertIn("| Test model | Generation | Repair | Repair tries | Pipeline-disabled |", comparison_markdown)
+        self.assertIn("| Test model | Before disabling | Before tests | Before failures | Before errors | Before skipped | Disabling | After disabling |", comparison_markdown)
+        self.assertIn("`generation=passed`", comparison_markdown)
+        self.assertIn("`maven_status=test_failures`", comparison_markdown)
+        self.assertIn("`maven_status=passed`", comparison_markdown)
 
     def test_comparison_report_marks_different_mutant_sets(self) -> None:
         config = self.config(("model-b", "model-c"))
