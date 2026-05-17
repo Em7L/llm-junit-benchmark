@@ -50,13 +50,14 @@ def generate_tests(
         raise FileNotFoundError(f"Repository not found: {repo_dir}")
     if maven_cmd is None:
         maven_cmd = ["mvn", "test"]
+    log_prefix = f"[tests: {model}]"
 
     print()
     print("-" * 72)
-    print(f"[tests] Test suite generation ({model})")
+    print(f"{log_prefix} Test suite generation")
     print("-" * 72)
-    print(f"[tests] Reading baseline repository from {repo_dir.resolve()}")
-    print(f"[tests] Requesting initial generated test suite with model `{model}`")
+    print(f"{log_prefix} Reading baseline repository from {repo_dir.resolve()}")
+    print(f"{log_prefix} Requesting initial generated test suite")
 
     parsed = parse_structured_response(
         model=model,
@@ -76,7 +77,7 @@ def generate_tests(
 
     for attempt in range(max_repairs + 1):
         print()
-        print(f"[tests] Candidate attempt {attempt + 1}/{max_repairs + 1}")
+        print(f"{log_prefix} Candidate attempt {attempt + 1}/{max_repairs + 1}")
         try:
             validate_generated_tests(parsed)
         except OutputValidationError as exc:
@@ -87,7 +88,7 @@ def generate_tests(
                 ) from exc
 
             print(
-                f"[tests] Validation failed ({exc}). "
+                f"{log_prefix} Validation failed ({exc}). "
                 f"Requesting repair attempt {attempt + 1}/{max_repairs}"
             )
             previous = parsed
@@ -113,17 +114,17 @@ def generate_tests(
                         "Generated test suite failed semantic validation after repair attempts.\n"
                         f"{repair_exc}"
                     ) from repair_exc
-                print(f"[tests] Repair response was incomplete ({repair_exc}). Requesting another repair.")
+                print(f"{log_prefix} Repair response was incomplete ({repair_exc}). Requesting another repair.")
                 parsed = previous
             continue
 
         if attempt == 0 and initial_output_dir is not None and not initial_snapshot_written:
-            print(f"[tests] Writing initial generated suite snapshot to {initial_output_dir.resolve()}")
+            print(f"{log_prefix} Writing initial generated suite snapshot to {initial_output_dir.resolve()}")
             reset_directory(initial_output_dir)
             write_artifacts(initial_output_dir, parsed.files)
             initial_snapshot_written = True
 
-        print(f"[tests] Writing generated tests to {output_dir.resolve()}")
+        print(f"{log_prefix} Writing generated tests to {output_dir.resolve()}")
         reset_directory(output_dir)
         write_artifacts(output_dir, parsed.files)
 
@@ -131,15 +132,15 @@ def generate_tests(
         try:
             compile_cmd = compile_check_command(maven_cmd)
             if compile_cmd is not None:
-                print(f"[tests] Checking test compilation with: {' '.join(compile_cmd)}")
+                print(f"{log_prefix} Checking test compilation with: {' '.join(compile_cmd)}")
                 compile_result = run_maven_tests(staged_dir, compile_cmd)
                 if compile_result.status in {"test_compile_failure", "main_compile_failure"}:
                     result = compile_result
                 else:
-                    print(f"[tests] Verifying test suite with: {' '.join(maven_cmd)}")
+                    print(f"{log_prefix} Verifying test suite with: {' '.join(maven_cmd)}")
                     result = run_maven_tests(staged_dir, maven_cmd)
             else:
-                print(f"[tests] Verifying test suite with: {' '.join(maven_cmd)}")
+                print(f"{log_prefix} Verifying test suite with: {' '.join(maven_cmd)}")
                 result = run_maven_tests(staged_dir, maven_cmd)
             if first_verification_result is None:
                 first_verification_result = result
@@ -152,7 +153,7 @@ def generate_tests(
                 shutil.rmtree(staged_dir, ignore_errors=True)
 
         if result.passed:
-            print("[tests] Verification passed. Test suite is valid.")
+            print(f"{log_prefix} Verification passed. Test suite is valid.")
             parsed.repair_attempts = repair_attempts
             parsed.repair_reasons = repair_reasons
             parsed.repair_outcome = classify_repair(
@@ -164,11 +165,11 @@ def generate_tests(
             return parsed
 
         if attempt == max_repairs:
-            print("[tests] Verification failed and no repair attempts remain. Keeping the final generated suite for evaluation.")
+            print(f"{log_prefix} Verification failed and no repair attempts remain. Keeping the final generated suite for evaluation.")
             break
 
         print(
-            f"[tests] Verification failed "
+            f"{log_prefix} Verification failed "
             f"(exit={result.exit_code}, failures={result.failures}, errors={result.errors}). "
             f"Requesting repair attempt {attempt + 1}/{max_repairs}"
         )
@@ -190,13 +191,13 @@ def generate_tests(
         except OutputValidationError as exc:
             if attempt == max_repairs - 1:
                 print(
-                    "[tests] Repair response was incomplete and no repair attempts remain. "
+                    f"{log_prefix} Repair response was incomplete and no repair attempts remain. "
                     "Keeping the last complete generated suite for evaluation."
                 )
                 parsed = previous
                 final_repair_discarded = True
                 break
-            print(f"[tests] Repair response was incomplete ({exc}). Requesting another repair.")
+            print(f"{log_prefix} Repair response was incomplete ({exc}). Requesting another repair.")
             parsed = previous
 
     parsed.repair_attempts = repair_attempts

@@ -95,6 +95,17 @@ artifacts/runs/<model-combination>/run-N/generated_tests/<model-name>/
 
 Evaluation then compares all generated suites against the same baseline repository under the same Maven, JaCoCo, and PIT procedure.
 
+To aggregate many preserved `comparison_report.json` files into one study-level summary, run:
+
+```powershell
+python summarize_comparison_reports.py
+```
+
+By default this scans `artifacts/runs/` and writes:
+
+- `artifacts/summary/comparison_reports_summary.json`
+- `artifacts/summary/comparison_reports_summary.md`
+
 ## Outputs
 
 The main generated files and folders are:
