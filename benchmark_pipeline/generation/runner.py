@@ -21,7 +21,7 @@ class BaselineGenerationConfig:
     manifest_path: Path
     verify_cmd: Sequence[str]
     max_repairs: int
-    benchmark_profile: BenchmarkProfile
+    benchmark_profile: BenchmarkProfile | None
 
 
 @dataclass(frozen=True)

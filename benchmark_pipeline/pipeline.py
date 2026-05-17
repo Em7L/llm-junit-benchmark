@@ -27,7 +27,7 @@ from benchmark_pipeline.models import GeneratedRepo, GeneratedTests
 class PipelineConfig:
     repo_model: str
     tests_models: Sequence[str]
-    benchmark_profile: BenchmarkProfile
+    benchmark_profile: BenchmarkProfile | None
     project_name: str
     baseline_repo: Path
     tests_dir: Path
@@ -61,12 +61,22 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     print("=" * 72)
     print("[pipeline] Running full benchmark pipeline")
     print(f"[pipeline] Repository model: {config.repo_model}")
-    print(f"[pipeline] Benchmark profile: {config.benchmark_profile.profile_id}")
+    print(
+        "[pipeline] Benchmark profile: "
+        + (config.benchmark_profile.profile_id if config.benchmark_profile is not None else "auto-selected by model")
+    )
     print(f"[pipeline] Test models: {', '.join(config.tests_models)}")
     print("=" * 72)
 
     print(f"[pipeline] Writing benchmark profile manifest to {config.profile_manifest.resolve()}")
-    dump_json(config.profile_manifest, config.benchmark_profile.to_dict())
+    dump_json(
+        config.profile_manifest,
+        (
+            config.benchmark_profile.to_dict()
+            if config.benchmark_profile is not None
+            else {"profile_id": None, "domain": None, "selection_mode": "model_selected"}
+        ),
+    )
 
     print_step("baseline generation")
     generated_repo = run_baseline_generation(

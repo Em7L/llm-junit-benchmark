@@ -21,7 +21,7 @@ from benchmark_pipeline.models import GeneratedTests
 def write_comparison_reports(
     *,
     repo_model: str,
-    benchmark_profile: BenchmarkProfile,
+    benchmark_profile: BenchmarkProfile | None,
     tests_models: list[str],
     suite_names: dict[str, str],
     baseline_repo: Path,
@@ -55,7 +55,7 @@ def write_comparison_reports(
 def comparison_payload(
     *,
     repo_model: str,
-    benchmark_profile: BenchmarkProfile,
+    benchmark_profile: BenchmarkProfile | None,
     tests_models: list[str],
     suite_names: dict[str, str],
     baseline_repo: Path,
@@ -136,7 +136,11 @@ def comparison_payload(
 
     return {
         "repo_model": repo_model,
-        "benchmark_profile": benchmark_profile.to_dict(),
+        "benchmark_profile": (
+            benchmark_profile.to_dict()
+            if benchmark_profile is not None
+            else {"profile_id": None, "domain": None, "selection_mode": "model_selected"}
+        ),
         "test_models": tests_models,
         "baseline_repo": baseline_repo.as_posix(),
         "mutant_set": mutant_set_summary(evaluations),
@@ -234,8 +238,8 @@ def comparison_markdown(payload: dict[str, object]) -> str:
         "# Model Comparison Report",
         "",
         f"- Repository model: `{payload['repo_model']}`",
-        f"- Benchmark profile: `{payload['benchmark_profile']['profile_id']}`",
-        f"- Domain: `{payload['benchmark_profile']['domain']}`",
+        f"- Benchmark profile: `{payload['benchmark_profile']['profile_id'] or 'auto-selected by model'}`",
+        f"- Domain: `{payload['benchmark_profile']['domain'] or 'auto-selected by model'}`",
         f"- Baseline repository: `{payload['baseline_repo']}`",
     ]
     lines.extend(render_summary_table(rows))

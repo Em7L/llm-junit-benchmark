@@ -18,9 +18,9 @@ def main() -> None:
     parser.add_argument("--tests-models", nargs="+", default=None, help="One or more models for test generation.")
     parser.add_argument(
         "--profile-id",
-        required=True,
         choices=BENCHMARK_PROFILE_IDS,
-        help="Benchmark profile used for baseline repository generation.",
+        default=None,
+        help="Optional benchmark profile used for baseline repository generation.",
     )
     parser.add_argument("--project-name", default="generated-java-app", help="Suggested project name for baseline generation.")
     parser.add_argument("--output-root", default="artifacts/runs", help="Root directory for preserved pipeline runs.")
@@ -40,11 +40,11 @@ def main() -> None:
     tests_models = args.tests_models or [args.tests_model or default_model]
 
     repo_model = args.repo_model or args.model or REPO_GEN_MODEL
-    benchmark_profile = get_benchmark_profile(args.profile_id)
+    benchmark_profile = get_benchmark_profile(args.profile_id) if args.profile_id else None
     run_dir = (
         Path(args.run_dir)
         if args.run_dir
-        else next_run_dir(Path(args.output_root), benchmark_profile.profile_id, repo_model, tests_models)
+        else next_run_dir(Path(args.output_root), benchmark_profile.profile_id if benchmark_profile else None, repo_model, tests_models)
     )
     print(f"[pipeline] Run directory: {run_dir.resolve()}")
 
@@ -67,7 +67,7 @@ def main() -> None:
     run_pipeline(config)
 
 
-def next_run_dir(output_root: Path, profile_id: str, repo_model: str, tests_models: list[str]) -> Path:
+def next_run_dir(output_root: Path, profile_id: str | None, repo_model: str, tests_models: list[str]) -> Path:
     group_dir = output_root / run_group_name(profile_id, repo_model, tests_models)
     index = 1
     while True:
@@ -77,10 +77,10 @@ def next_run_dir(output_root: Path, profile_id: str, repo_model: str, tests_mode
         index += 1
 
 
-def run_group_name(profile_id: str, repo_model: str, tests_models: list[str]) -> str:
+def run_group_name(profile_id: str | None, repo_model: str, tests_models: list[str]) -> str:
     tests_part = "_".join(sorted(safe_model_name(model) for model in tests_models))
     return (
-        f"profile-{safe_model_name(profile_id)}__repo-{safe_model_name(repo_model)}__tests-{tests_part}"
+        f"profile-{safe_model_name(profile_id or 'auto')}__repo-{safe_model_name(repo_model)}__tests-{tests_part}"
     )
 
 
