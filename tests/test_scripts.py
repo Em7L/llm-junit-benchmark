@@ -36,10 +36,10 @@ class TestScripts(unittest.TestCase):
             shutil.rmtree(self.root)
 
     def test_run_pipeline_script_builds_config_from_cli_args(self) -> None:
-        module = load_script("0_run_pipeline.py")
+        module = load_script("run_pipeline.py")
         run_pipeline = Mock()
         argv = [
-            "0_run_pipeline.py",
+            "run_pipeline.py",
             "--model",
             "default-model",
             "--repo-model",
@@ -79,7 +79,7 @@ class TestScripts(unittest.TestCase):
         self.assertEqual(config.max_repairs, 3)
 
     def test_run_pipeline_script_uses_next_preserved_run_directory_by_default(self) -> None:
-        module = load_script("0_run_pipeline.py")
+        module = load_script("run_pipeline.py")
         run_pipeline = Mock()
         output_root = self.root / "runs"
         existing_run = (
@@ -95,7 +95,7 @@ class TestScripts(unittest.TestCase):
                 sys,
                 "argv",
                 [
-                    "0_run_pipeline.py",
+                    "run_pipeline.py",
                     "--repo-model",
                     "repo-model",
                     "--tests-model",
@@ -118,10 +118,10 @@ class TestScripts(unittest.TestCase):
         self.assertEqual(config.report_md, expected_run / "reports/comparison_report.md")
 
     def test_run_pipeline_script_accepts_multiple_test_models(self) -> None:
-        module = load_script("0_run_pipeline.py")
+        module = load_script("run_pipeline.py")
         run_pipeline = Mock()
         argv = [
-            "0_run_pipeline.py",
+            "run_pipeline.py",
             "--repo-model",
             "repo-model",
             "--profile-id",
@@ -147,7 +147,7 @@ class TestScripts(unittest.TestCase):
         self.assertEqual(config.benchmark_profile.profile_id, "low")
 
     def test_run_group_name_is_independent_of_test_model_order(self) -> None:
-        module = load_script("0_run_pipeline.py")
+        module = load_script("run_pipeline.py")
 
         self.assertEqual(
             module.run_group_name("low", "repo-model", ["model-b", "model-a"]),

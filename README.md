@@ -2,7 +2,7 @@
 
 This project is a Python pipeline for generating small Java/Maven repositories, generating JUnit 5 test suites for them with LLMs, and evaluating the generated tests with Maven, JaCoCo, and PIT mutation testing.
 
-The main CLI entrypoint is `0_run_pipeline.py`. The implementation lives in the `benchmark_pipeline/` package.
+The main CLI entrypoint is `run_pipeline.py`. The implementation lives in the `benchmark_pipeline/` package.
 
 ## Prerequisites
 
@@ -43,7 +43,7 @@ Model provider selection is currently simple: model names containing `deepseek` 
 Run the complete workflow with the default models from `.env` or `benchmark_pipeline/config.py` and an explicit benchmark profile:
 
 ```powershell
-python 0_run_pipeline.py --profile-id low
+python run_pipeline.py --profile-id low
 ```
 
 By default, each full pipeline run is preserved under a new run directory:
@@ -56,13 +56,13 @@ artifacts/runs/profile-<profile-id>__repo-<repo-model>__tests-<test-models>/run-
 Run with explicit models:
 
 ```powershell
-python 0_run_pipeline.py --profile-id low --repo-model gpt-5.4-mini --tests-model gpt-4o
+python run_pipeline.py --profile-id low --repo-model gpt-5.4-mini --tests-model gpt-4o
 ```
 
 Run the intended model-comparison workflow with one baseline generator and multiple test-suite generators:
 
 ```powershell
-python 0_run_pipeline.py --profile-id high --repo-model gpt-5.4-mini --tests-models gpt-4o gpt-5.4-mini gpt-4o-mini
+python run_pipeline.py --profile-id high --repo-model gpt-5.4-mini --tests-models gpt-4o gpt-5.4-mini gpt-4o-mini
 ```
 
 The benchmark profile determines the structural complexity target for baseline repository generation. The model still chooses the concrete application domain, but it must satisfy the selected complexity frame. Profiles are defined centrally in [benchmark_pipeline/generation/profiles.py](benchmark_pipeline/generation/profiles.py). The current benchmark frame contains `2` fixed profiles:
@@ -85,7 +85,7 @@ The full pipeline does the following:
 
 ## Compare Multiple Test Models
 
-Use `0_run_pipeline.py --profile-id ... --tests-models ...` for the main experiment. The pipeline generates one baseline repository and then creates one generated test suite per test model under:
+Use `run_pipeline.py --profile-id ... --tests-models ...` for the main experiment. The pipeline generates one baseline repository and then creates one generated test suite per test model under:
 
 ```text
 artifacts/runs/<model-combination>/run-N/generated_tests/_repaired_tests/<model-name>/
@@ -145,7 +145,7 @@ python -m ruff check .
 Compile-check the Python files:
 
 ```powershell
-python -m compileall 0_run_pipeline.py benchmark_pipeline tests
+python -m compileall run_pipeline.py benchmark_pipeline tests
 ```
 
 ## Notes
