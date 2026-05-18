@@ -395,8 +395,8 @@ def render_comparison_table(
         "",
         f"## {title}",
         "",
-        "| Test model | Before disabling | Before tests | Before failures | Before errors | Disabling | After disabling | After skipped | Line cov. | Branch cov. | Mutations | Killed | Survived | No coverage | Mutation score |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Test model | Status | Tests | Test Failures | Test Errors | Skipped tests | Line cov. | Branch cov. | Mutations | Killed | Survived | No coverage | Mutation score |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         assert isinstance(row, dict)
@@ -411,8 +411,6 @@ def render_comparison_table(
                     markdown_cell(snapshot_dict.get("before_tests")),
                     markdown_cell(snapshot_dict.get("before_failures")),
                     markdown_cell(snapshot_dict.get("before_errors")),
-                    markdown_cell(snapshot_dict.get("disabling_outcome")),
-                    markdown_cell(snapshot_dict.get("after_disabling_status")),
                     markdown_cell(snapshot_dict.get("after_skipped")),
                     percent_cell(snapshot_dict.get("line_coverage")),
                     percent_cell(snapshot_dict.get("branch_coverage")),

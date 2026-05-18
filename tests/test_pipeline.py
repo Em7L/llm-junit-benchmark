@@ -199,6 +199,31 @@ class TestPipeline(unittest.TestCase):
 
         self.assertFalse((config.baseline_repo.parent / ".staging").exists())
 
+    def test_run_pipeline_removes_target_dirs_from_preserved_artifacts(self) -> None:
+        config = self.config(("model-b",))
+
+        def create_targets(_generation_config) -> GeneratedTests:
+            (config.baseline_repo / "target" / "maven-status").mkdir(parents=True, exist_ok=True)
+            (config.baseline_repo / "target" / "maven-status" / "inputFiles.lst").write_text(
+                r"C:\tmp\absolute.java",
+                encoding="utf-8",
+            )
+            target_dir = config.tests_dir / "_repaired_tests" / "model-b" / "target" / "surefire-reports"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            (target_dir / "TEST-demo.xml").write_text("<testsuite />", encoding="utf-8")
+            return generated_tests()
+
+        with (
+            patch("benchmark_pipeline.pipeline.run_baseline_generation", return_value=generated_repo()),
+            patch("benchmark_pipeline.pipeline.run_test_generation", side_effect=create_targets),
+            patch("benchmark_pipeline.pipeline.run_evaluation", return_value=[]),
+            redirect_stdout(StringIO()),
+        ):
+            run_pipeline(config)
+
+        self.assertFalse((config.baseline_repo / "target").exists())
+        self.assertFalse((config.tests_dir / "_repaired_tests" / "model-b" / "target").exists())
+
     def test_run_pipeline_continues_when_one_test_model_fails(self) -> None:
         config = self.config(("model-b", "model-c", "model-d"))
 
@@ -439,7 +464,10 @@ class TestPipeline(unittest.TestCase):
         self.assertIn("## Initial Generated Suite", comparison_markdown)
         self.assertIn("## Final Repaired Suite", comparison_markdown)
         self.assertIn("| Test model | Generation | Repair | Repair tries |", comparison_markdown)
-        self.assertIn("| Test model | Before disabling | Before tests | Before failures | Before errors | Disabling | After disabling | After skipped |", comparison_markdown)
+        self.assertIn(
+            "| Test model | Status | Tests | Test Failures | Test Errors | Skipped tests |",
+            comparison_markdown,
+        )
         self.assertIn("`generation=passed`", comparison_markdown)
         self.assertIn("`maven_status=test_failures`", comparison_markdown)
         self.assertIn("`maven_status=passed`", comparison_markdown)

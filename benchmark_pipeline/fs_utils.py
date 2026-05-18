@@ -128,6 +128,17 @@ def remove_staging_root(repo_root: Path) -> None:
         shutil.rmtree(staging_root, ignore_errors=True)
 
 
+def remove_named_directories(root: Path, *names: str) -> None:
+    if not root.exists():
+        return
+    targets = {name for name in names if name}
+    if not targets:
+        return
+    for path in sorted(root.rglob("*"), key=lambda candidate: len(candidate.parts), reverse=True):
+        if path.is_dir() and path.name in targets:
+            shutil.rmtree(path, ignore_errors=True)
+
+
 def dump_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

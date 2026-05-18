@@ -12,7 +12,13 @@ import concurrent.futures
 from benchmark_pipeline.evaluation import EvaluationOutcome
 from benchmark_pipeline.evaluation.comparison_reports import write_comparison_reports
 from benchmark_pipeline.evaluation.runner import EvaluationRunConfig, EvaluationSuiteRun, run_evaluation
-from benchmark_pipeline.fs_utils import directories_match, dump_json, remove_staging_root, reset_directory
+from benchmark_pipeline.fs_utils import (
+    directories_match,
+    dump_json,
+    remove_named_directories,
+    remove_staging_root,
+    reset_directory,
+)
 from benchmark_pipeline.generation.profiles import BenchmarkProfile
 from benchmark_pipeline.generation.runner import (
     BaselineGenerationConfig,
@@ -152,6 +158,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
         print_step_done("test generation")
         print()
         print("[pipeline] Full pipeline completed with no evaluable test suites")
+        cleanup_published_artifacts(config)
         remove_staging_root(config.baseline_repo)
         return PipelineOutcome(
             generated_repo=generated_repo,
@@ -211,6 +218,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
 
     print()
     print("[pipeline] Full pipeline completed successfully")
+    cleanup_published_artifacts(config)
     remove_staging_root(config.baseline_repo)
     return PipelineOutcome(
         generated_repo=generated_repo,
@@ -242,6 +250,11 @@ def print_step(label: str) -> None:
 
 def print_step_done(label: str) -> None:
     print(f"[pipeline] Completed {label}")
+
+
+def cleanup_published_artifacts(config: PipelineConfig) -> None:
+    remove_named_directories(config.baseline_repo, "target")
+    remove_named_directories(config.tests_dir, "target")
 
 
 def run_evaluation_for_suites(
