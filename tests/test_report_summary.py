@@ -17,7 +17,7 @@ class ReportSummaryTests(unittest.TestCase):
         payloads = [
             {
                 "_report_path": "artifacts/runs/group/run-001/reports/comparison_report.json",
-                "benchmark_profile": {"profile_id": "library", "domain": "library"},
+                "benchmark_profile": {"profile_id": "low", "complexity": "low"},
                 "rows": [
                     {
                         "test_model": "deepseek-v4-flash",
@@ -39,7 +39,7 @@ class ReportSummaryTests(unittest.TestCase):
                         "survived": 10,
                         "no_coverage": 10,
                         "mutation_score": 0.8,
-                        "before_repair": {
+                        "initial_generated_suite": {
                             "after_tests": 10,
                             "after_failures": 1,
                             "after_errors": 0,
@@ -54,7 +54,7 @@ class ReportSummaryTests(unittest.TestCase):
                             "no_coverage": 10,
                             "mutation_score": 0.75,
                         },
-                        "after_repair": {
+                        "final_generated_suite": {
                             "after_tests": 10,
                             "after_failures": 0,
                             "after_errors": 0,
@@ -79,7 +79,7 @@ class ReportSummaryTests(unittest.TestCase):
             },
             {
                 "_report_path": "artifacts/runs/group/run-002/reports/comparison_report.json",
-                "benchmark_profile": {"profile_id": "library", "domain": "library"},
+                "benchmark_profile": {"profile_id": "low", "complexity": "low"},
                 "rows": [
                     {
                         "test_model": "deepseek-v4-flash",
@@ -101,7 +101,7 @@ class ReportSummaryTests(unittest.TestCase):
                         "survived": 20,
                         "no_coverage": 10,
                         "mutation_score": 0.75,
-                        "before_repair": {
+                        "initial_generated_suite": {
                             "after_tests": 20,
                             "after_failures": 0,
                             "after_errors": 0,
@@ -116,7 +116,7 @@ class ReportSummaryTests(unittest.TestCase):
                             "no_coverage": 10,
                             "mutation_score": 0.75,
                         },
-                        "after_repair": {
+                        "final_generated_suite": {
                             "after_tests": 20,
                             "after_failures": 0,
                             "after_errors": 0,
@@ -147,9 +147,17 @@ class ReportSummaryTests(unittest.TestCase):
         self.assertAlmostEqual(deepseek["final_means"]["tests"], 15.0)
         self.assertAlmostEqual(deepseek["final_means"]["line_coverage"], 0.85)
         self.assertAlmostEqual(deepseek["final_means"]["mutation_score"], 0.775)
-        self.assertAlmostEqual(deepseek["repair_delta_means"]["mutation_score"], 0.025)
+        self.assertAlmostEqual(deepseek["repair_delta_means"]["mutation_score"], 0.05)
+        self.assertEqual(deepseek["repair_delta_stats"]["mutation_score"]["n"], 1)
         self.assertEqual(failed["generation_status_counts"]["failed"], 1)
         self.assertIsNone(failed["final_pass_rate"])
+        markdown = format_summary_markdown(summary)
+        self.assertIn("## Overall Results", markdown)
+        self.assertIn("## Overall Variability", markdown)
+        self.assertIn("## Repair Effects (Repaired Runs Only)", markdown)
+        self.assertIn("## Profile `low`", markdown)
+        self.assertNotIn("Overall Outcome Counts", markdown)
+        self.assertNotIn("Overall Final Generated Suite Averages", markdown)
 
     def test_find_and_write_summary_files(self) -> None:
         root = Path("tests") / "__tmp_report_summary"
@@ -159,7 +167,7 @@ class ReportSummaryTests(unittest.TestCase):
         try:
             report_path = root / "group" / "run-001" / "reports" / "comparison_report.json"
             report_path.parent.mkdir(parents=True)
-            report_path.write_text('{"benchmark_profile":{"profile_id":"library","domain":"library"},"rows":[]}', encoding="utf-8")
+            report_path.write_text('{"benchmark_profile":{"profile_id":"low","complexity":"low"},"rows":[]}', encoding="utf-8")
 
             found = find_comparison_reports(root)
             self.assertEqual(found, [report_path])

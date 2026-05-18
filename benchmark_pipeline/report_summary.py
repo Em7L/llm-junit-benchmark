@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 import json
 from pathlib import Path
-from statistics import fmean
+from statistics import fmean, stdev
 from typing import Any
 
 from benchmark_pipeline.fs_utils import dump_json
@@ -86,10 +86,14 @@ def summarize_model_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     generation_passes = generation_status_counts.get("passed", 0)
     evaluable_rows = sum(1 for row in rows if isinstance(row.get("evaluation_status"), str))
     final_passes = evaluation_status_counts.get("passed", 0)
+    repaired_runs = sum(
+        1 for row in rows if (_numeric(row.get("repair_attempts")) or 0) > 0
+    )
 
-    final_metrics = _metric_means(rows, row_key=None)
-    initial_metrics = _metric_means(rows, row_key="before_repair", snapshot_map=INITIAL_METRIC_MAP)
-    repair_delta_metrics = _delta_means(rows)
+    final_metric_stats = _metric_stats(rows, row_key=None)
+    initial_metric_stats = _metric_stats(rows, row_key="initial_generated_suite", snapshot_map=INITIAL_METRIC_MAP)
+    final_generated_suite_stats = _metric_stats(rows, row_key="final_generated_suite", snapshot_map=INITIAL_METRIC_MAP)
+    repair_delta_metric_stats = _delta_stats(rows)
 
     repair_attempts = [value for value in (_numeric(row.get("repair_attempts")) for row in rows) if value is not None]
 
@@ -101,10 +105,17 @@ def summarize_model_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "evaluation_status_counts": dict(evaluation_status_counts),
         "generation_pass_rate": _safe_rate(generation_passes, len(rows)),
         "final_pass_rate": _safe_rate(final_passes, evaluable_rows),
+        "repair_needed_rate": _safe_rate(repaired_runs, len(rows)),
+        "repaired_run_count": repaired_runs,
         "mean_repair_attempts": fmean(repair_attempts) if repair_attempts else None,
-        "final_means": final_metrics,
-        "initial_means": initial_metrics,
-        "repair_delta_means": repair_delta_metrics,
+        "final_means": _metric_means_from_stats(final_metric_stats),
+        "initial_means": _metric_means_from_stats(initial_metric_stats),
+        "final_generated_suite_means": _metric_means_from_stats(final_generated_suite_stats),
+        "repair_delta_means": _metric_means_from_stats(repair_delta_metric_stats),
+        "final_stats": final_metric_stats,
+        "initial_stats": initial_metric_stats,
+        "final_generated_suite_stats": final_generated_suite_stats,
+        "repair_delta_stats": repair_delta_metric_stats,
     }
 
 
@@ -142,12 +153,12 @@ FINAL_SNAPSHOT_MAP = {
 }
 
 
-def _metric_means(
+def _metric_stats(
     rows: list[dict[str, Any]],
     *,
     row_key: str | None,
     snapshot_map: dict[str, str] | None = None,
-) -> dict[str, float | None]:
+) -> dict[str, dict[str, float | int | None]]:
     metric_values: dict[str, list[float]] = {key: [] for key in METRIC_KEYS}
     for row in rows:
         source: Any = row
@@ -161,12 +172,12 @@ def _metric_means(
             if value is not None:
                 metric_values[key].append(value)
     return {
-        key: (fmean(values) if values else None)
+        key: _summarize_values(values)
         for key, values in metric_values.items()
     }
 
 
-def _delta_means(rows: list[dict[str, Any]]) -> dict[str, float | None]:
+def _delta_stats(rows: list[dict[str, Any]]) -> dict[str, dict[str, float | int | None]]:
     delta_values: dict[str, list[float]] = {
         "tests": [],
         "skipped": [],
@@ -181,8 +192,11 @@ def _delta_means(rows: list[dict[str, Any]]) -> dict[str, float | None]:
         "mutation_score": [],
     }
     for row in rows:
-        before = row.get("before_repair")
-        after = row.get("after_repair")
+        repair_attempts = _numeric(row.get("repair_attempts"))
+        if repair_attempts is None or repair_attempts <= 0:
+            continue
+        before = row.get("initial_generated_suite")
+        after = row.get("final_generated_suite")
         if not isinstance(before, dict) or not isinstance(after, dict):
             continue
         for metric, before_key in FINAL_SNAPSHOT_MAP.items():
@@ -194,8 +208,29 @@ def _delta_means(rows: list[dict[str, Any]]) -> dict[str, float | None]:
                 continue
             delta_values[metric].append(after_value - before_value)
     return {
-        key: (fmean(values) if values else None)
+        key: _summarize_values(values)
         for key, values in delta_values.items()
+    }
+
+
+def _metric_means_from_stats(
+    metric_stats: dict[str, dict[str, float | int | None]],
+) -> dict[str, float | None]:
+    return {
+        key: _numeric(stats.get("mean")) if isinstance(stats, dict) else None
+        for key, stats in metric_stats.items()
+    }
+
+
+def _summarize_values(values: list[float]) -> dict[str, float | int | None]:
+    if not values:
+        return {"n": 0, "mean": None, "stdev": None, "min": None, "max": None}
+    return {
+        "n": len(values),
+        "mean": fmean(values),
+        "stdev": stdev(values) if len(values) > 1 else None,
+        "min": min(values),
+        "max": max(values),
     }
 
 
@@ -227,10 +262,10 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
         lines.extend(
             [
                 "",
-                "## Overall Model Averages",
+                "## Overall Results",
                 "",
-                "| Test model | Runs | Gen pass rate | Final pass rate | Avg repair tries | Avg tests | Avg line cov. | Avg branch cov. | Avg mutation score |",
-                "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+                "| Test model | Runs | Gen pass rate | Final pass rate | Repair needed | Avg line cov. | Avg branch cov. | Avg mutation score |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|",
             ]
         )
         for model, model_summary in sorted(model_summaries.items()):
@@ -242,8 +277,7 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
                         _cell(model_summary.get("run_count")),
                         _percent(model_summary.get("generation_pass_rate")),
                         _percent(model_summary.get("final_pass_rate")),
-                        _number(model_summary.get("mean_repair_attempts"), 2),
-                        _number(model_summary.get("final_means", {}).get("tests"), 2),
+                        _percent(model_summary.get("repair_needed_rate")),
                         _percent(model_summary.get("final_means", {}).get("line_coverage")),
                         _percent(model_summary.get("final_means", {}).get("branch_coverage")),
                         _percent(model_summary.get("final_means", {}).get("mutation_score")),
@@ -251,6 +285,8 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
                 )
                 + " |"
             )
+        lines.extend(_render_compact_variability_table("Overall Variability", model_summaries))
+        lines.extend(_render_repair_effects_table("Repair Effects (Repaired Runs Only)", model_summaries))
 
     profiles = summary.get("profiles", {})
     if isinstance(profiles, dict):
@@ -260,8 +296,8 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
                     "",
                     f"## Profile `{profile_id}`",
                     "",
-                    "| Test model | Runs | Gen pass rate | Final pass rate | Avg tests | Avg line cov. | Avg branch cov. | Avg mutation score |",
-                    "|---|---:|---:|---:|---:|---:|---:|---:|",
+                    "| Test model | Runs | Final pass rate | Avg line cov. | Avg branch cov. | Avg mutation score |",
+                    "|---|---:|---:|---:|---:|---:|",
                 ]
             )
             models = profile_summary.get("models", {})
@@ -273,9 +309,7 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
                             [
                                 model,
                                 _cell(model_summary.get("run_count")),
-                                _percent(model_summary.get("generation_pass_rate")),
                                 _percent(model_summary.get("final_pass_rate")),
-                                _number(model_summary.get("final_means", {}).get("tests"), 2),
                                 _percent(model_summary.get("final_means", {}).get("line_coverage")),
                                 _percent(model_summary.get("final_means", {}).get("branch_coverage")),
                                 _percent(model_summary.get("final_means", {}).get("mutation_score")),
@@ -304,3 +338,58 @@ def _percent(value: Any) -> str:
 
 def _number(value: Any, digits: int) -> str:
     return "N/A" if not isinstance(value, int | float) else f"{value:.{digits}f}"
+
+
+def _render_compact_variability_table(title: str, model_summaries: dict[str, Any]) -> list[str]:
+    lines = [
+        "",
+        f"## {title}",
+        "",
+        "| Test model | n | Line cov. sd | Branch cov. sd | Mutation sd |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for model, model_summary in sorted(model_summaries.items()):
+        final_stats = model_summary.get("final_stats", {})
+        line_stats = final_stats.get("line_coverage", {})
+        branch_stats = final_stats.get("branch_coverage", {})
+        mutation_stats = final_stats.get("mutation_score", {})
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    model,
+                    _cell(line_stats.get("n")),
+                    _percent(line_stats.get("stdev")),
+                    _percent(branch_stats.get("stdev")),
+                    _percent(mutation_stats.get("stdev")),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
+def _render_repair_effects_table(title: str, model_summaries: dict[str, Any]) -> list[str]:
+    lines = [
+        "",
+        f"## {title}",
+        "",
+        "| Test model | Repaired runs | Delta line cov. | Delta branch cov. | Delta mutation score |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for model, model_summary in sorted(model_summaries.items()):
+        metrics = model_summary.get("repair_delta_means", {})
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    model,
+                    _cell(model_summary.get("repaired_run_count")),
+                    _percent(metrics.get("line_coverage")),
+                    _percent(metrics.get("branch_coverage")),
+                    _percent(metrics.get("mutation_score")),
+                ]
+            )
+            + " |"
+        )
+    return lines

@@ -47,7 +47,7 @@ class TestScripts(unittest.TestCase):
             "--tests-model",
             "tests-model",
             "--profile-id",
-            "library",
+            "low",
             "--project-name",
             "demo-project",
             "--baseline-repo",
@@ -73,7 +73,7 @@ class TestScripts(unittest.TestCase):
         config = run_pipeline.call_args.args[0]
         self.assertEqual(config.repo_model, "repo-model")
         self.assertEqual(config.tests_models, ("tests-model",))
-        self.assertEqual(config.benchmark_profile.profile_id, "library")
+        self.assertEqual(config.benchmark_profile.profile_id, "low")
         self.assertEqual(config.project_name, "demo-project")
         self.assertEqual(config.maven_cmd, ["mvn", "verify"])
         self.assertEqual(config.max_repairs, 3)
@@ -84,7 +84,7 @@ class TestScripts(unittest.TestCase):
         output_root = self.root / "runs"
         existing_run = (
             output_root
-            / "profile-library__repo-repo-model__tests-test-model"
+            / "profile-low__repo-repo-model__tests-test-model"
             / "run-001"
         )
         existing_run.mkdir(parents=True)
@@ -101,7 +101,7 @@ class TestScripts(unittest.TestCase):
                     "--tests-model",
                     "test-model",
                     "--profile-id",
-                    "library",
+                    "low",
                     "--output-root",
                     str(output_root),
                 ],
@@ -111,7 +111,7 @@ class TestScripts(unittest.TestCase):
             module.main()
 
         config = run_pipeline.call_args.args[0]
-        expected_run = output_root / "profile-library__repo-repo-model__tests-test-model" / "run-002"
+        expected_run = output_root / "profile-low__repo-repo-model__tests-test-model" / "run-002"
         self.assertEqual(config.baseline_repo, expected_run / "baseline_repo")
         self.assertEqual(config.tests_dir, expected_run / "generated_tests")
         self.assertEqual(config.profile_manifest, expected_run / "manifests/benchmark_profile.json")
@@ -125,7 +125,7 @@ class TestScripts(unittest.TestCase):
             "--repo-model",
             "repo-model",
             "--profile-id",
-            "library",
+            "low",
             "--tests-models",
             "model-b",
             "model-c",
@@ -144,14 +144,14 @@ class TestScripts(unittest.TestCase):
         config = run_pipeline.call_args.args[0]
         self.assertEqual(config.repo_model, "repo-model")
         self.assertEqual(config.tests_models, ("model-b", "model-c", "model-d"))
-        self.assertEqual(config.benchmark_profile.profile_id, "library")
+        self.assertEqual(config.benchmark_profile.profile_id, "low")
 
     def test_run_group_name_is_independent_of_test_model_order(self) -> None:
         module = load_script("0_run_pipeline.py")
 
         self.assertEqual(
-            module.run_group_name("library", "repo-model", ["model-b", "model-a"]),
-            module.run_group_name("library", "repo-model", ["model-a", "model-b"]),
+            module.run_group_name("low", "repo-model", ["model-b", "model-a"]),
+            module.run_group_name("low", "repo-model", ["model-a", "model-b"]),
         )
 
 

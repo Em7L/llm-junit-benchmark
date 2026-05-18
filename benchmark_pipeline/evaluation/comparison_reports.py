@@ -83,7 +83,7 @@ def comparison_payload(
 
         generated = generated_tests.get(model)
         run = evaluations_by_suite.get(suite_name)
-        initial_outcome = initial_evaluations.get(suite_name)
+        initial_run = initial_evaluations.get(suite_name)
         if run is None:
             rows.append(
                 {
@@ -98,8 +98,18 @@ def comparison_payload(
         outcome = run.outcome
         coverage = outcome.baseline_coverage
         pitest = outcome.pitest_result
-        before_snapshot = evaluation_snapshot(initial_outcome)
+        before_snapshot = evaluation_snapshot(initial_run)
         after_snapshot = evaluation_snapshot(outcome)
+        final_suite_before_disabling_status = (
+            outcome.initial_baseline_result.status
+            if outcome.initial_baseline_result is not None
+            else outcome.baseline_result.status
+        )
+        final_suite_disabling_outcome = classify_disabling(
+            baseline_result=outcome.baseline_result,
+            disabled_tests=outcome.disabled_tests,
+            initial_baseline_result=outcome.initial_baseline_result,
+        )
         rows.append(
             {
                 "test_model": model,
@@ -107,14 +117,9 @@ def comparison_payload(
                 "generation_status": "passed",
                 "repair_outcome": generated.repair_outcome if generated is not None else None,
                 "repair_attempts": generated.repair_attempts if generated is not None else None,
-                "initial_evaluation_status": (
-                    outcome.initial_baseline_result.status if outcome.initial_baseline_result is not None else outcome.baseline_result.status
-                ),
-                "disabling_outcome": classify_disabling(
-                    baseline_result=outcome.baseline_result,
-                    disabled_tests=outcome.disabled_tests,
-                    initial_baseline_result=outcome.initial_baseline_result,
-                ),
+                "final_suite_before_disabling_status": final_suite_before_disabling_status,
+                "final_suite_disabling_outcome": final_suite_disabling_outcome,
+                "disabling_outcome": final_suite_disabling_outcome,
                 "evaluation_status": outcome.baseline_result.status,
                 "tests": outcome.baseline_result.tests,
                 "failures": outcome.baseline_result.failures,
@@ -129,8 +134,8 @@ def comparison_payload(
                 "survived": pitest.status_counts.get("SURVIVED", 0) if pitest is not None else None,
                 "no_coverage": pitest.status_counts.get("NO_COVERAGE", 0) if pitest is not None else None,
                 "mutation_score": pitest.mutation_score if pitest is not None else None,
-                "before_repair": before_snapshot or after_snapshot,
-                "after_repair": after_snapshot,
+                "initial_generated_suite": before_snapshot or after_snapshot,
+                "final_generated_suite": after_snapshot,
             }
         )
 
@@ -139,17 +144,20 @@ def comparison_payload(
         "benchmark_profile": (
             benchmark_profile.to_dict()
             if benchmark_profile is not None
-            else {"profile_id": None, "domain": None, "selection_mode": "model_selected"}
+            else {"profile_id": None, "complexity": None, "selection_mode": "model_selected"}
         ),
         "test_models": tests_models,
         "baseline_repo": baseline_repo.as_posix(),
-        "mutant_set": mutant_set_summary(evaluations),
+        "mutant_set": mutant_set_summary(evaluations, initial_evaluations),
         "rows": rows,
     }
 
 
 def evaluation_snapshot(outcome: object | None) -> dict[str, object] | None:
     from benchmark_pipeline.evaluation import EvaluationOutcome
+
+    if isinstance(outcome, EvaluationSuiteRun):
+        outcome = outcome.outcome
 
     if not isinstance(outcome, EvaluationOutcome):
         return None
@@ -186,13 +194,23 @@ def evaluation_snapshot(outcome: object | None) -> dict[str, object] | None:
     }
 
 
-def mutant_set_summary(evaluations: list[EvaluationSuiteRun]) -> dict[str, object]:
+def mutant_set_summary(
+    evaluations: list[EvaluationSuiteRun],
+    initial_evaluations: dict[str, object],
+) -> dict[str, object]:
     suite_mutants: dict[str, set[str]] = {}
     for run in evaluations:
         pitest = run.outcome.pitest_result
         if pitest is None:
             continue
-        suite_mutants[run.suite_name] = {mutation.mutant_id for mutation in pitest.mutations}
+        suite_mutants[suite_label(run)] = {mutation.mutant_id for mutation in pitest.mutations}
+    for run in initial_evaluations.values():
+        if not isinstance(run, EvaluationSuiteRun):
+            continue
+        pitest = run.outcome.pitest_result
+        if pitest is None:
+            continue
+        suite_mutants[suite_label(run)] = {mutation.mutant_id for mutation in pitest.mutations}
 
     if not suite_mutants:
         return {
@@ -227,6 +245,13 @@ def mutant_set_summary(evaluations: list[EvaluationSuiteRun]) -> dict[str, objec
     }
 
 
+def suite_label(run: EvaluationSuiteRun) -> str:
+    parent = run.suite_dir.parent.name
+    if parent.startswith("_"):
+        return f"{parent}/{run.suite_dir.name}"
+    return run.suite_name
+
+
 def comparison_markdown(payload: dict[str, object]) -> str:
     rows = payload["rows"]
     assert isinstance(rows, list)
@@ -239,7 +264,7 @@ def comparison_markdown(payload: dict[str, object]) -> str:
         "",
         f"- Repository model: `{payload['repo_model']}`",
         f"- Benchmark profile: `{payload['benchmark_profile']['profile_id'] or 'auto-selected by model'}`",
-        f"- Domain: `{payload['benchmark_profile']['domain'] or 'auto-selected by model'}`",
+        f"- Complexity: `{payload['benchmark_profile']['complexity'] or 'auto-selected by model'}`",
         f"- Baseline repository: `{payload['baseline_repo']}`",
     ]
     lines.extend(render_summary_table(rows))
@@ -247,7 +272,7 @@ def comparison_markdown(payload: dict[str, object]) -> str:
         render_comparison_table(
             title="Initial Generated Suite",
             rows=rows,
-            snapshot_key="before_repair",
+            snapshot_key="initial_generated_suite",
         )
     )
     if has_repair_attempts:
@@ -255,7 +280,7 @@ def comparison_markdown(payload: dict[str, object]) -> str:
             render_comparison_table(
                 title="Final Repaired Suite",
                 rows=rows,
-                snapshot_key="after_repair",
+                snapshot_key="final_generated_suite",
             )
         )
 
@@ -300,7 +325,7 @@ def comparison_markdown(payload: dict[str, object]) -> str:
     for row in rows:
         if not isinstance(row, dict):
             continue
-        for key in ("before_repair", "after_repair"):
+        for key in ("initial_generated_suite", "final_generated_suite"):
             snapshot = row.get(key)
             if not isinstance(snapshot, dict):
                 continue
@@ -313,9 +338,9 @@ def comparison_markdown(payload: dict[str, object]) -> str:
         if isinstance(status, str):
             maven_status_names.append(status)
 
-        initial_status = row.get("initial_evaluation_status")
-        if isinstance(initial_status, str):
-            maven_status_names.append(initial_status)
+        final_before_disabling_status = row.get("final_suite_before_disabling_status")
+        if isinstance(final_before_disabling_status, str):
+            maven_status_names.append(final_before_disabling_status)
 
         missing_status = row.get("generation_status") == "passed" and row.get("evaluation_status") == "missing"
         if missing_status:

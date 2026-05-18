@@ -37,17 +37,25 @@ def evaluate_repositories(
         initial_baseline_result = run_maven_tests(staged_baseline, maven_cmd)
         baseline_result = initial_baseline_result
         disabled_tests: list[str] = []
+        evaluated_stage = staged_baseline
 
         if initial_baseline_result.status == "test_failures" and initial_baseline_result.failing_tests:
-            disabled_tests = disable_baseline_failing_tests(staged_baseline, initial_baseline_result.failing_tests)
-            baseline_result = run_maven_tests(staged_baseline, maven_cmd)
+            evaluated_stage = stage_repo_with_tests(baseline_repo, tests_dir)
+            staged_dirs.append(evaluated_stage)
+            disabled_tests = disable_baseline_failing_tests(
+                evaluated_stage,
+                initial_baseline_result.failing_tests,
+            )
+            baseline_result = run_maven_tests(evaluated_stage, maven_cmd)
 
-        baseline_coverage = parse_jacoco_report(staged_baseline / "target" / "site" / "jacoco" / "jacoco.xml")
+        baseline_coverage = parse_jacoco_report(evaluated_stage / "target" / "site" / "jacoco" / "jacoco.xml")
         if baseline_coverage is None:
-            run_maven_command(staged_baseline, [maven_cmd[0], "jacoco:report", "-DskipTests"])
-            baseline_coverage = parse_jacoco_report(staged_baseline / "target" / "site" / "jacoco" / "jacoco.xml")
+            run_maven_command(evaluated_stage, [maven_cmd[0], "jacoco:report", "-DskipTests"])
+            baseline_coverage = parse_jacoco_report(
+                evaluated_stage / "target" / "site" / "jacoco" / "jacoco.xml"
+            )
 
-        pitest_result = run_pitest(staged_baseline, maven_cmd[0]) if baseline_result.passed else None
+        pitest_result = run_pitest(evaluated_stage, maven_cmd[0]) if baseline_result.passed else None
         if pitest_result is not None and pitest_report_dir is not None:
             persist_pitest_reports(pitest_result, pitest_report_dir)
         return EvaluationOutcome(

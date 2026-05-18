@@ -122,6 +122,12 @@ def stage_repo_with_artifacts(repo_root: Path, files: Sequence[FileArtifact]) ->
     return temp_dir
 
 
+def remove_staging_root(repo_root: Path) -> None:
+    staging_root = repo_root.parent / ".staging"
+    if staging_root.exists():
+        shutil.rmtree(staging_root, ignore_errors=True)
+
+
 def dump_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

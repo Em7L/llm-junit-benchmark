@@ -11,10 +11,14 @@ from benchmark_pipeline.generation.profiles import BenchmarkProfile, render_benc
 
 def build_repo_prompt(project_name: str | None = None, benchmark_profile: BenchmarkProfile | None = None) -> str:
     explicit_name = project_name or "generated-java-app"
+    profile = benchmark_profile
+    min_classes = profile.min_classes if profile is not None else 6
+    max_classes = profile.max_classes if profile is not None else 8
+    orchestrator_fanout = 2 if min_classes <= 5 else 3
     if benchmark_profile is not None:
         profile_instruction = render_benchmark_profile_prompt(benchmark_profile)
     else:
-        profile_instruction = "- Choose the application domain yourself."
+        profile_instruction = "- Choose a self-contained application domain and repository complexity yourself."
     return textwrap.dedent(
         f"""
         Build a complete, small Maven repository for JDK 21.
@@ -23,9 +27,9 @@ def build_repo_prompt(project_name: str | None = None, benchmark_profile: Benchm
         - Suggested project name: `{explicit_name}`. Adjust it if a better name matches the chosen domain.
 
         Structural requirements:
-        - Use 6-10 production classes under a coherent domain model.
+        - Use {min_classes}-{max_classes} production classes under a coherent domain model.
         - The app should include orchestration logic plus focused helper/domain classes.
-        - Include at least one service/orchestrator class that calls methods from at least 3 other classes.
+        - Include at least one service/orchestrator class that calls methods from at least {orchestrator_fanout} other classes.
         - Include at least one method that returns different results based on state built from prior method calls.
         - Maven project with `pom.xml`.
         - Java source under `src/main/java`.
@@ -35,15 +39,10 @@ def build_repo_prompt(project_name: str | None = None, benchmark_profile: Benchm
         - JaCoCo should generate XML coverage output during `mvn test`.
         - Configure the Maven Exec plugin so the app can be run with `mvn exec:java`.
 
-        Complexity targets:
-        - Total production lines of code (excluding blanks and comments): 300-500.
-        - At least 15 public methods across all classes.
-        - At least 3 methods with cyclomatic complexity >= 4 (multiple nested if/else, switch cases, or loop + condition combos).
+        Code richness requirements:
         - Include at least one collection-based workflow (iteration, filtering, aggregation).
         - Include at least one formatter/parser/translator style class and one rule/validation class.
         - Include at least one edge-case-heavy method with 3 or more meaningful scenarios.
-
-        Mutation-testing-friendly patterns (important):
         - Include at least 3 methods with arithmetic or relational operators in non-trivial expressions (e.g., price * quantity - discount, not just getters).
         - Include at least 2 methods with boundary checks (e.g., if (value <= 0), if (list.isEmpty())).
         - Include at least 1 method with a multi-condition boolean expression (e.g., if (a > 0 && b != null && c.contains(x))).
@@ -55,11 +54,10 @@ def build_repo_prompt(project_name: str | None = None, benchmark_profile: Benchm
         - Do not use `System.exit()`.
         - Do not use static mutable state (static fields that change at runtime).
         - Do not use `Random` or any non-deterministic source.
-        - Do not use deep inheritance hierarchies (max 2 levels).
         - Avoid external services, databases, files, sockets, threads, or frameworks.
 
         Consistency and compilation:
-        - Keep the code understandable enough that another agent can infer expected behavior and write tests.
+        - Keep the code understandable, with clear behavior and explicit rules.
         - The repository must compile on JDK 21.
         - The repository must pass `mvn test` with zero failing tests.
         - All returned files must be mutually consistent and compile together.
@@ -111,7 +109,7 @@ def build_repo_repair_prompt(
 
         Requirements:
         - Return the complete repository as full file contents, not partial patches.
-        - Preserve the same benchmark profile and overall project idea unless the compiler errors force a structural correction.
+        - Preserve the same requested complexity level and overall project idea unless the compiler errors force a structural correction.
         - Fix all compilation, packaging, import, and reference inconsistencies.
         - Ensure the returned repository passes `mvn test`.
         - Do not reference classes, methods, constructors, fields, or imports that are not defined in the returned repository.
@@ -197,6 +195,8 @@ def build_test_repair_prompt(repo_root: Path, build_output: str) -> str:
         - Return the complete repaired test suite, including unchanged test files.
         - Do not return only the modified file.
         - Fix all compilation errors, import issues, and test failures.
+        - Modify only the failing test files identified by the compiler or test output.
+        - Do not change unrelated test files unless a closely related shared helper, import, or setup dependency requires it.
         - Ensure the returned test suite passes `mvn test`.
         - Do not modify production code.
         - Do not invent classes, methods, constructors, or fields that do not exist in the production code.

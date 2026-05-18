@@ -9,10 +9,10 @@ import shutil
 from typing import Sequence
 import concurrent.futures
 
-from benchmark_pipeline.evaluation import EvaluationOutcome, evaluate_repositories
+from benchmark_pipeline.evaluation import EvaluationOutcome
 from benchmark_pipeline.evaluation.comparison_reports import write_comparison_reports
 from benchmark_pipeline.evaluation.runner import EvaluationRunConfig, EvaluationSuiteRun, run_evaluation
-from benchmark_pipeline.fs_utils import directories_match, dump_json, reset_directory
+from benchmark_pipeline.fs_utils import directories_match, dump_json, remove_staging_root, reset_directory
 from benchmark_pipeline.generation.profiles import BenchmarkProfile
 from benchmark_pipeline.generation.runner import (
     BaselineGenerationConfig,
@@ -74,7 +74,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
         (
             config.benchmark_profile.to_dict()
             if config.benchmark_profile is not None
-            else {"profile_id": None, "domain": None, "selection_mode": "model_selected"}
+            else {"profile_id": None, "complexity": None, "selection_mode": "model_selected"}
         ),
     )
 
@@ -96,11 +96,14 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     generated_tests: dict[str, GeneratedTests] = {}
     test_generation_errors: dict[str, str] = {}
     suite_names = {model: safe_model_name(model) for model in config.tests_models}
-    initial_tests_root = config.tests_dir / "_initial"
+    repaired_tests_root = config.tests_dir / "_repaired_tests"
+    initial_tests_root = config.tests_dir / "_initial_tests"
     reset_directory(config.tests_dir)
+    repaired_tests_root.mkdir(parents=True, exist_ok=True)
+    initial_tests_root.mkdir(parents=True, exist_ok=True)
     def generate_for_model(model: str) -> tuple[str, GeneratedTests | None, str | None]:
         suite_name = suite_names[model]
-        suite_dir = config.tests_dir / suite_name
+        suite_dir = repaired_tests_root / suite_name
         try:
             tests = run_test_generation(
                 TestGenerationConfig(
@@ -149,6 +152,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
         print_step_done("test generation")
         print()
         print("[pipeline] Full pipeline completed with no evaluable test suites")
+        remove_staging_root(config.baseline_repo)
         return PipelineOutcome(
             generated_repo=generated_repo,
             generated_tests=generated_tests,
@@ -158,16 +162,14 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     print_step_done("test generation")
 
     print_step("PIT evaluation")
-    evaluations = run_evaluation(
-        EvaluationRunConfig(
-            baseline_repo=config.baseline_repo,
-            tests_dir=config.tests_dir,
-            pitest_report_dir=config.pitest_report_dir,
-            maven_cmd=config.maven_cmd,
-        )
+    evaluations = run_evaluation_for_suites(
+        baseline_repo=config.baseline_repo,
+        tests_dir=repaired_tests_root,
+        pitest_report_dir=config.pitest_report_dir / "_repaired_tests",
+        maven_cmd=config.maven_cmd,
     )
-    evaluations_by_suite = {run.suite_name: run.outcome for run in evaluations}
-    initial_evaluations: dict[str, EvaluationOutcome] = {}
+    evaluations_by_suite = evaluation_map_by_suite_name(evaluations)
+    initial_evaluations: dict[str, object] = {}
     for model, generated in generated_tests.items():
         if generated.repair_attempts == 0:
             continue
@@ -175,18 +177,23 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
         initial_suite_dir = initial_tests_root / suite_name
         if not initial_suite_dir.exists():
             continue
-        final_suite_dir = config.tests_dir / suite_name
+        final_suite_dir = repaired_tests_root / suite_name
         if final_suite_dir.exists() and directories_match(initial_suite_dir, final_suite_dir):
             print(
                 f"[pipeline] Reusing final evaluation for `{model}` because the initial and final suites are identical."
             )
-            initial_evaluations[suite_name] = evaluations_by_suite[suite_name]
+            initial_outcome = evaluations_by_suite.get(suite_name)
+            if initial_outcome is not None:
+                initial_evaluations[suite_name] = initial_outcome
             continue
-        initial_evaluations[suite_name] = evaluate_repositories(
+        initial_evaluation = run_evaluation_for_suites(
             baseline_repo=config.baseline_repo,
             tests_dir=initial_suite_dir,
+            pitest_report_dir=config.pitest_report_dir / "_initial_tests" / suite_name,
             maven_cmd=config.maven_cmd,
         )
+        if initial_evaluation:
+            initial_evaluations[suite_name] = initial_evaluation[0]
     write_comparison_reports(
         repo_model=config.repo_model,
         benchmark_profile=config.benchmark_profile,
@@ -204,6 +211,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
 
     print()
     print("[pipeline] Full pipeline completed successfully")
+    remove_staging_root(config.baseline_repo)
     return PipelineOutcome(
         generated_repo=generated_repo,
         generated_tests=generated_tests,
@@ -234,3 +242,29 @@ def print_step(label: str) -> None:
 
 def print_step_done(label: str) -> None:
     print(f"[pipeline] Completed {label}")
+
+
+def run_evaluation_for_suites(
+    *,
+    baseline_repo: Path,
+    tests_dir: Path,
+    pitest_report_dir: Path,
+    maven_cmd: Sequence[str],
+) -> list[EvaluationSuiteRun]:
+    if not tests_dir.exists():
+        return []
+    try:
+        return run_evaluation(
+            EvaluationRunConfig(
+                baseline_repo=baseline_repo,
+                tests_dir=tests_dir,
+                pitest_report_dir=pitest_report_dir,
+                maven_cmd=maven_cmd,
+            )
+        )
+    except FileNotFoundError:
+        return []
+
+
+def evaluation_map_by_suite_name(runs: list[EvaluationSuiteRun]) -> dict[str, EvaluationOutcome]:
+    return {run.suite_name: run.outcome for run in runs}

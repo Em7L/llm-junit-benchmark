@@ -104,7 +104,7 @@ class TestPipeline(unittest.TestCase):
         return PipelineConfig(
             repo_model="repo-model",
             tests_models=tests_models,
-            benchmark_profile=get_benchmark_profile("library"),
+            benchmark_profile=get_benchmark_profile("low"),
             project_name="demo-project",
             baseline_repo=self.root / "baseline_repo",
             tests_dir=self.root / "generated_tests",
@@ -144,21 +144,21 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(baseline_config.model, "repo-model")
         self.assertEqual(baseline_config.max_repairs, 2)
         self.assertEqual(baseline_config.manifest_path, config.baseline_manifest)
-        self.assertEqual(baseline_config.benchmark_profile.profile_id, "library")
+        self.assertEqual(baseline_config.benchmark_profile.profile_id, "low")
 
         tests_config = run_test_generation.call_args.args[0]
         self.assertEqual(tests_config.model, "tests-model")
         self.assertEqual(tests_config.max_repairs, 2)
         self.assertEqual(tests_config.manifest_path, config.tests_manifest)
-        self.assertEqual(tests_config.output_dir, config.tests_dir / "tests-model")
+        self.assertEqual(tests_config.output_dir, config.tests_dir / "_repaired_tests" / "tests-model")
 
         evaluation_config = run_evaluation.call_args.args[0]
         self.assertEqual(evaluation_config.baseline_repo, config.baseline_repo)
-        self.assertEqual(evaluation_config.tests_dir, config.tests_dir)
+        self.assertEqual(evaluation_config.tests_dir, config.tests_dir / "_repaired_tests")
 
         self.assertIs(outcome.evaluation, evaluation)
         profile_manifest = json.loads(config.profile_manifest.read_text(encoding="utf-8"))
-        self.assertEqual(profile_manifest["profile_id"], "library")
+        self.assertEqual(profile_manifest["profile_id"], "low")
 
     def test_run_pipeline_generates_one_suite_per_test_model(self) -> None:
         config = self.config(("model-b", "model-c"))
@@ -174,11 +174,30 @@ class TestPipeline(unittest.TestCase):
         first_config = run_test_generation.call_args_list[0].args[0]
         second_config = run_test_generation.call_args_list[1].args[0]
         self.assertEqual(first_config.model, "model-b")
-        self.assertEqual(first_config.output_dir, config.tests_dir / "model-b")
+        self.assertEqual(first_config.output_dir, config.tests_dir / "_repaired_tests" / "model-b")
         self.assertEqual(first_config.manifest_path, self.root / "manifests/generated_tests_model-b.json")
         self.assertEqual(second_config.model, "model-c")
-        self.assertEqual(second_config.output_dir, config.tests_dir / "model-c")
+        self.assertEqual(second_config.output_dir, config.tests_dir / "_repaired_tests" / "model-c")
         self.assertEqual(second_config.manifest_path, self.root / "manifests/generated_tests_model-c.json")
+
+    def test_run_pipeline_removes_staging_root_at_end(self) -> None:
+        config = self.config(("model-b",))
+
+        def create_staging_dir(_generation_config) -> GeneratedTests:
+            staging_root = config.baseline_repo.parent / ".staging"
+            staging_root.mkdir(parents=True, exist_ok=True)
+            (staging_root / "placeholder").mkdir(parents=True, exist_ok=True)
+            return generated_tests()
+
+        with (
+            patch("benchmark_pipeline.pipeline.run_baseline_generation", return_value=generated_repo()),
+            patch("benchmark_pipeline.pipeline.run_test_generation", side_effect=create_staging_dir),
+            patch("benchmark_pipeline.pipeline.run_evaluation", return_value=[]),
+            redirect_stdout(StringIO()),
+        ):
+            run_pipeline(config)
+
+        self.assertFalse((config.baseline_repo.parent / ".staging").exists())
 
     def test_run_pipeline_continues_when_one_test_model_fails(self) -> None:
         config = self.config(("model-b", "model-c", "model-d"))
@@ -202,11 +221,12 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(run_test_generation.call_count, 3)
         self.assertEqual(sorted(outcome.generated_tests), ["model-b", "model-d"])
         self.assertEqual(outcome.test_generation_errors, {"model-c": "model-c failed"})
-        self.assertFalse((config.tests_dir / "model-c").exists())
+        self.assertFalse((config.tests_dir / "_repaired_tests" / "model-c").exists())
+        self.assertFalse((config.tests_dir / "_initial_tests" / "model-c").exists())
         run_evaluation.assert_called_once()
         comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
         self.assertEqual([row["test_model"] for row in comparison["rows"]], ["model-b", "model-c", "model-d"])
-        self.assertEqual(comparison["benchmark_profile"]["profile_id"], "library")
+        self.assertEqual(comparison["benchmark_profile"]["profile_id"], "low")
         self.assertEqual(comparison["rows"][1]["generation_status"], "failed")
         self.assertTrue((config.report_md.parent / "comparison_report.md").exists())
 
@@ -221,18 +241,18 @@ class TestPipeline(unittest.TestCase):
             patch(
                 "benchmark_pipeline.pipeline.run_evaluation",
                 return_value=[
-                    EvaluationSuiteRun(
-                        suite_name="model-b",
-                        suite_dir=config.tests_dir / "model-b",
-                        pitest_report_dir=config.pitest_report_dir / "model-b",
-                        outcome=model_b_outcome,
-                    ),
-                    EvaluationSuiteRun(
-                        suite_name="model-c",
-                        suite_dir=config.tests_dir / "model-c",
-                        pitest_report_dir=config.pitest_report_dir / "model-c",
-                        outcome=model_c_outcome,
-                    ),
+                        EvaluationSuiteRun(
+                            suite_name="model-b",
+                            suite_dir=config.tests_dir / "_repaired_tests" / "model-b",
+                            pitest_report_dir=config.pitest_report_dir / "_repaired_tests" / "model-b",
+                            outcome=model_b_outcome,
+                        ),
+                        EvaluationSuiteRun(
+                            suite_name="model-c",
+                            suite_dir=config.tests_dir / "_repaired_tests" / "model-c",
+                            pitest_report_dir=config.pitest_report_dir / "_repaired_tests" / "model-c",
+                            outcome=model_c_outcome,
+                        ),
                 ],
             ),
             redirect_stdout(StringIO()),
@@ -247,15 +267,21 @@ class TestPipeline(unittest.TestCase):
                 "identical": True,
                 "common_mutants": 2,
                 "union_mutants": 2,
-                "per_suite_mutants": {"model-b": 2, "model-c": 2},
-                "only_in_suite": {"model-b": [], "model-c": []},
+                "per_suite_mutants": {
+                    "_repaired_tests/model-b": 2,
+                    "_repaired_tests/model-c": 2,
+                },
+                "only_in_suite": {
+                    "_repaired_tests/model-b": [],
+                    "_repaired_tests/model-c": [],
+                },
             },
         )
         comparison_markdown = (config.report_md.parent / "comparison_report.md").read_text(encoding="utf-8")
-        self.assertIn("Benchmark profile: `library`", comparison_markdown)
+        self.assertIn("Benchmark profile: `low`", comparison_markdown)
         self.assertIn("Identical mutant IDs across suites: `True`", comparison_markdown)
 
-    def test_comparison_report_includes_initial_status_and_cleaning_outcome(self) -> None:
+    def test_comparison_report_includes_final_suite_status_and_cleaning_outcome(self) -> None:
         config = self.config(("model-b",))
         initial = MavenResult(
             label="repo",
@@ -296,12 +322,12 @@ class TestPipeline(unittest.TestCase):
             patch(
                 "benchmark_pipeline.pipeline.run_evaluation",
                 return_value=[
-                    EvaluationSuiteRun(
-                        suite_name="model-b",
-                        suite_dir=config.tests_dir / "model-b",
-                        pitest_report_dir=config.pitest_report_dir / "model-b",
-                        outcome=outcome,
-                    )
+                        EvaluationSuiteRun(
+                            suite_name="model-b",
+                            suite_dir=config.tests_dir / "_repaired_tests" / "model-b",
+                            pitest_report_dir=config.pitest_report_dir / "_repaired_tests" / "model-b",
+                            outcome=outcome,
+                        )
                 ],
             ),
             redirect_stdout(StringIO()),
@@ -312,11 +338,12 @@ class TestPipeline(unittest.TestCase):
         row = comparison["rows"][0]
         self.assertEqual(row["repair_outcome"], "repair_not_needed")
         self.assertEqual(row["repair_attempts"], 0)
-        self.assertEqual(row["initial_evaluation_status"], "test_failures")
+        self.assertEqual(row["final_suite_before_disabling_status"], "test_failures")
+        self.assertEqual(row["final_suite_disabling_outcome"], "disabling_applied_successful")
         self.assertEqual(row["disabling_outcome"], "disabling_applied_successful")
-        self.assertEqual(row["before_repair"]["before_failures"], 1)
-        self.assertEqual(row["before_repair"]["after_failures"], 0)
-        self.assertEqual(row["before_repair"]["after_skipped"], 1)
+        self.assertEqual(row["initial_generated_suite"]["before_failures"], 1)
+        self.assertEqual(row["initial_generated_suite"]["after_failures"], 0)
+        self.assertEqual(row["initial_generated_suite"]["after_skipped"], 1)
 
     def test_run_pipeline_records_before_repair_evaluation_when_repairs_were_attempted(self) -> None:
         config = self.config(("model-b",))
@@ -368,26 +395,45 @@ class TestPipeline(unittest.TestCase):
             patch("benchmark_pipeline.pipeline.run_test_generation", side_effect=generate_with_initial_dir),
             patch(
                 "benchmark_pipeline.pipeline.run_evaluation",
-                return_value=[
-                    EvaluationSuiteRun(
-                        suite_name="model-b",
-                        suite_dir=config.tests_dir / "model-b",
-                        pitest_report_dir=config.pitest_report_dir / "model-b",
-                        outcome=evaluation_outcome(pitest_result(["mutant-1"])),
-                    )
+                side_effect=[
+                    [
+                        EvaluationSuiteRun(
+                            suite_name="model-b",
+                            suite_dir=config.tests_dir / "_repaired_tests" / "model-b",
+                            pitest_report_dir=config.pitest_report_dir / "_repaired_tests" / "model-b",
+                            outcome=evaluation_outcome(pitest_result(["mutant-1"])),
+                        )
+                    ],
+                    [
+                        EvaluationSuiteRun(
+                            suite_name="model-b",
+                            suite_dir=config.tests_dir / "_initial_tests" / "model-b",
+                            pitest_report_dir=config.pitest_report_dir / "_initial_tests" / "model-b",
+                            outcome=before_outcome,
+                        )
+                    ],
                 ],
-            ),
-            patch("benchmark_pipeline.pipeline.evaluate_repositories", return_value=before_outcome),
+            ) as run_evaluation,
             redirect_stdout(StringIO()),
         ):
             run_pipeline(config)
 
+        self.assertEqual(run_evaluation.call_args_list[1].args[0].tests_dir, config.tests_dir / "_initial_tests" / "model-b")
+        self.assertEqual(run_evaluation.call_args_list[1].args[0].pitest_report_dir, config.pitest_report_dir / "_initial_tests" / "model-b")
         comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
         row = comparison["rows"][0]
-        self.assertEqual(row["before_repair"]["before_disabling_status"], "test_failures")
-        self.assertEqual(row["before_repair"]["before_failures"], 1)
-        self.assertEqual(row["before_repair"]["disabling_outcome"], "disabling_applied_successful")
-        self.assertEqual(row["after_repair"]["after_disabling_status"], "passed")
+        self.assertEqual(row["initial_generated_suite"]["before_disabling_status"], "test_failures")
+        self.assertEqual(row["initial_generated_suite"]["before_failures"], 1)
+        self.assertEqual(row["initial_generated_suite"]["disabling_outcome"], "disabling_applied_successful")
+        self.assertEqual(row["final_generated_suite"]["after_disabling_status"], "passed")
+        self.assertEqual(comparison["mutant_set"]["comparable_suite_count"], 2)
+        self.assertEqual(
+            comparison["mutant_set"]["per_suite_mutants"],
+            {
+                "_initial_tests/model-b": 1,
+                "_repaired_tests/model-b": 1,
+            },
+        )
         comparison_markdown = (config.report_md.parent / "comparison_report.md").read_text(encoding="utf-8")
         self.assertIn("## Generation And Repair Summary", comparison_markdown)
         self.assertIn("## Initial Generated Suite", comparison_markdown)
@@ -427,23 +473,23 @@ class TestPipeline(unittest.TestCase):
             patch(
                 "benchmark_pipeline.pipeline.run_evaluation",
                 return_value=[
-                    EvaluationSuiteRun(
-                        suite_name="model-b",
-                        suite_dir=config.tests_dir / "model-b",
-                        pitest_report_dir=config.pitest_report_dir / "model-b",
-                        outcome=shared_outcome,
-                    )
+                        EvaluationSuiteRun(
+                            suite_name="model-b",
+                            suite_dir=config.tests_dir / "_repaired_tests" / "model-b",
+                            pitest_report_dir=config.pitest_report_dir / "_repaired_tests" / "model-b",
+                            outcome=shared_outcome,
+                        )
                 ],
-            ),
-            patch("benchmark_pipeline.pipeline.evaluate_repositories") as evaluate_repositories,
+            ) as run_evaluation,
             redirect_stdout(StringIO()),
         ):
             run_pipeline(config)
 
-        evaluate_repositories.assert_not_called()
+        run_evaluation.assert_called_once()
         comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
         row = comparison["rows"][0]
-        self.assertEqual(row["before_repair"], row["after_repair"])
+        self.assertEqual(row["initial_generated_suite"], row["final_generated_suite"])
+        self.assertEqual(comparison["mutant_set"]["comparable_suite_count"], 1)
 
     def test_comparison_report_marks_different_mutant_sets(self) -> None:
         config = self.config(("model-b", "model-c"))
@@ -456,18 +502,18 @@ class TestPipeline(unittest.TestCase):
             patch(
                 "benchmark_pipeline.pipeline.run_evaluation",
                 return_value=[
-                    EvaluationSuiteRun(
-                        suite_name="model-b",
-                        suite_dir=config.tests_dir / "model-b",
-                        pitest_report_dir=config.pitest_report_dir / "model-b",
-                        outcome=model_b_outcome,
-                    ),
-                    EvaluationSuiteRun(
-                        suite_name="model-c",
-                        suite_dir=config.tests_dir / "model-c",
-                        pitest_report_dir=config.pitest_report_dir / "model-c",
-                        outcome=model_c_outcome,
-                    ),
+                        EvaluationSuiteRun(
+                            suite_name="model-b",
+                            suite_dir=config.tests_dir / "_repaired_tests" / "model-b",
+                            pitest_report_dir=config.pitest_report_dir / "_repaired_tests" / "model-b",
+                            outcome=model_b_outcome,
+                        ),
+                        EvaluationSuiteRun(
+                            suite_name="model-c",
+                            suite_dir=config.tests_dir / "_repaired_tests" / "model-c",
+                            pitest_report_dir=config.pitest_report_dir / "_repaired_tests" / "model-c",
+                            outcome=model_c_outcome,
+                        ),
                 ],
             ),
             redirect_stdout(StringIO()),
@@ -478,8 +524,8 @@ class TestPipeline(unittest.TestCase):
         self.assertFalse(comparison["mutant_set"]["identical"])
         self.assertEqual(comparison["mutant_set"]["common_mutants"], 1)
         self.assertEqual(comparison["mutant_set"]["union_mutants"], 3)
-        self.assertEqual(comparison["mutant_set"]["only_in_suite"]["model-b"], ["mutant-2"])
-        self.assertEqual(comparison["mutant_set"]["only_in_suite"]["model-c"], ["mutant-3"])
+        self.assertEqual(comparison["mutant_set"]["only_in_suite"]["_repaired_tests/model-b"], ["mutant-2"])
+        self.assertEqual(comparison["mutant_set"]["only_in_suite"]["_repaired_tests/model-c"], ["mutant-3"])
 
     def test_run_pipeline_writes_comparison_report_when_all_test_models_fail(self) -> None:
         config = self.config(("model-b", "model-c"))

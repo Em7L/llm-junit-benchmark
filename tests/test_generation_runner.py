@@ -69,7 +69,7 @@ class TestGenerationRunner(unittest.TestCase):
             manifest_path=self.root / "manifests/baseline.json",
             verify_cmd=["mvn", "test"],
             max_repairs=2,
-            benchmark_profile=get_benchmark_profile("library"),
+            benchmark_profile=get_benchmark_profile("low"),
         )
 
         with (
@@ -85,7 +85,7 @@ class TestGenerationRunner(unittest.TestCase):
         self.assertEqual(generate_verified_repo.call_args.kwargs["verify_cmd"], ["mvn", "test"])
         self.assertEqual(
             generate_verified_repo.call_args.kwargs["benchmark_profile"].profile_id,
-            "library",
+            "low",
         )
 
     def test_test_generation_writes_manifest(self) -> None:

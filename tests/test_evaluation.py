@@ -55,6 +55,10 @@ class TestEvaluation(unittest.TestCase):
 
         with (
             patch(
+                "benchmark_pipeline.evaluation.core.stage_repo_with_tests",
+                side_effect=[self.root / "staged-initial", self.root / "staged-cleaned"],
+            ) as stage_repo_with_tests,
+            patch(
                 "benchmark_pipeline.evaluation.core.run_maven_tests",
                 side_effect=[
                     maven_result("test_failures", ["com.example.AppTest#failsOnBaseline"]),
@@ -62,7 +66,12 @@ class TestEvaluation(unittest.TestCase):
                 ],
             ) as run_maven_tests,
             patch("benchmark_pipeline.evaluation.core.run_pitest", return_value=pitest_result) as run_pitest,
+            patch(
+                "benchmark_pipeline.evaluation.core.disable_baseline_failing_tests",
+                return_value=["com.example.AppTest#failsOnBaseline"],
+            ) as disable_baseline_failing_tests,
             patch("benchmark_pipeline.evaluation.core.run_maven_command"),
+            patch("benchmark_pipeline.evaluation.core.shutil.rmtree"),
         ):
             outcome = evaluate_repositories(
                 baseline_repo=self.repo,
@@ -70,8 +79,15 @@ class TestEvaluation(unittest.TestCase):
                 maven_cmd=["mvn", "test"],
             )
 
+        self.assertEqual(stage_repo_with_tests.call_count, 2)
+        disable_baseline_failing_tests.assert_called_once_with(
+            self.root / "staged-cleaned",
+            ["com.example.AppTest#failsOnBaseline"],
+        )
+        self.assertEqual(run_maven_tests.call_args_list[0].args[0], self.root / "staged-initial")
+        self.assertEqual(run_maven_tests.call_args_list[1].args[0], self.root / "staged-cleaned")
         self.assertEqual(run_maven_tests.call_count, 2)
-        self.assertEqual(run_pitest.call_count, 1)
+        run_pitest.assert_called_once_with(self.root / "staged-cleaned", "mvn")
         self.assertTrue(outcome.baseline_result.passed)
         self.assertEqual(outcome.disabled_tests, ["com.example.AppTest#failsOnBaseline"])
         self.assertIsNotNone(outcome.initial_baseline_result)
