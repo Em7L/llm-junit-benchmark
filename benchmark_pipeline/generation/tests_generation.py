@@ -19,6 +19,9 @@ from benchmark_pipeline.tools.llm import parse_structured_response
 from benchmark_pipeline.tools.maven import run_maven_tests
 
 
+GOOD_VERIFICATION_STATUSES = {"passed", "test_failures", "test_execution_failure"}
+
+
 def count_test_files(generated_tests: GeneratedTests) -> int:
     return len({file.path for file in generated_tests.files})
 
@@ -40,6 +43,10 @@ def compile_check_command(maven_cmd: list[str]) -> list[str] | None:
     if maven_cmd[-1] != "test":
         return None
     return [*maven_cmd[:-1], "test-compile"]
+
+
+def is_good_verification_result(result: MavenResult | None) -> bool:
+    return result is not None and result.status in GOOD_VERIFICATION_STATUSES
 
 
 def generate_tests(
@@ -77,6 +84,8 @@ def generate_tests(
     repair_reasons: list[str] = []
     final_repair_discarded = False
     first_verification_result: MavenResult | None = None
+    last_good_suite: GeneratedTests | None = None
+    last_good_result: MavenResult | None = None
     initial_snapshot_written = False
     result: MavenResult | None = None
 
@@ -175,7 +184,21 @@ def generate_tests(
             )
             return parsed
 
+        if is_good_verification_result(result):
+            last_good_suite = parsed
+            last_good_result = result
+
         if attempt == max_repairs:
+            if last_good_suite is not None and last_good_result is not None and last_good_suite is not parsed:
+                print(
+                    f"{log_prefix} Verification failed and no repair attempts remain. "
+                    "Keeping the last still-runnable generated suite for evaluation."
+                )
+                parsed = last_good_suite
+                result = last_good_result
+                reset_directory(output_dir)
+                write_artifacts(output_dir, parsed.files)
+                break
             print(f"{log_prefix} Verification failed and no repair attempts remain. Keeping the final generated suite for evaluation.")
             break
 

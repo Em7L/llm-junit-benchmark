@@ -24,6 +24,7 @@ class ReportSummaryTests(unittest.TestCase):
                         "generation_status": "passed",
                         "repair_outcome": "repair_successful",
                         "repair_attempts": 1,
+                        "final_suite_before_disabling_status": "passed",
                         "disabling_outcome": "disabling_not_needed",
                         "evaluation_status": "passed",
                         "tests": 10,
@@ -40,6 +41,7 @@ class ReportSummaryTests(unittest.TestCase):
                         "no_coverage": 10,
                         "mutation_score": 0.8,
                         "initial_generated_suite": {
+                            "before_disabling_status": "test_failures",
                             "after_tests": 10,
                             "after_failures": 1,
                             "after_errors": 0,
@@ -86,6 +88,7 @@ class ReportSummaryTests(unittest.TestCase):
                         "generation_status": "passed",
                         "repair_outcome": "repair_not_needed",
                         "repair_attempts": 0,
+                        "final_suite_before_disabling_status": "passed",
                         "disabling_outcome": "disabling_not_needed",
                         "evaluation_status": "passed",
                         "tests": 20,
@@ -102,6 +105,7 @@ class ReportSummaryTests(unittest.TestCase):
                         "no_coverage": 10,
                         "mutation_score": 0.75,
                         "initial_generated_suite": {
+                            "before_disabling_status": "passed",
                             "after_tests": 20,
                             "after_failures": 0,
                             "after_errors": 0,
@@ -141,7 +145,9 @@ class ReportSummaryTests(unittest.TestCase):
         failed = summary["models"]["gpt-5-mini"]
 
         self.assertEqual(summary["report_count"], 2)
-        self.assertAlmostEqual(deepseek["generation_pass_rate"], 1.0)
+        self.assertAlmostEqual(deepseek["accepted_suite_rate"], 1.0)
+        self.assertAlmostEqual(deepseek["initial_test_compile_rate"], 1.0)
+        self.assertAlmostEqual(deepseek["final_test_compile_rate"], 1.0)
         self.assertAlmostEqual(deepseek["final_pass_rate"], 1.0)
         self.assertAlmostEqual(deepseek["mean_repair_attempts"], 0.5)
         self.assertAlmostEqual(deepseek["final_means"]["tests"], 15.0)
@@ -156,6 +162,12 @@ class ReportSummaryTests(unittest.TestCase):
         self.assertIn("## Overall Variability", markdown)
         self.assertIn("## Repair Effects (Repaired Runs Only)", markdown)
         self.assertIn("## Profile `low`", markdown)
+        self.assertIn("Accepted suite rate` means the pipeline accepted a generated suite artifact", markdown)
+        self.assertIn("Initial test compile rate", markdown)
+        self.assertIn("Final test compile rate", markdown)
+        self.assertIn("Repair needed", markdown)
+        self.assertIn("Avg tests", markdown)
+        self.assertIn("## Profile `low` Variability", markdown)
         self.assertNotIn("Overall Outcome Counts", markdown)
         self.assertNotIn("Overall Final Generated Suite Averages", markdown)
 

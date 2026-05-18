@@ -409,6 +409,66 @@ class TestGenerationOrchestration(unittest.TestCase):
 
         self.assertEqual(result.repair_outcome, "repair_partially_improved")
 
+    def test_generate_tests_keeps_last_good_suite_when_repair_regresses_to_compile_failure(self) -> None:
+        repo_dir = self.root / "repo"
+        repo_dir.mkdir()
+        output_dir = self.root / "generated-tests"
+        initial = GeneratedTests(
+            summary="initial failing but runnable tests",
+            files=[
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("InitialTest"))
+            ],
+        )
+        regressed = GeneratedTests(
+            summary="regressed compile-failing tests",
+            files=[
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("RegressedTest"))
+            ],
+        )
+        initial_failure = MavenResult(
+            label="repo",
+            exit_code=1,
+            status="test_failures",
+            status_reason="One or more tests failed.",
+            tests=4,
+            failures=4,
+            errors=0,
+            skipped=0,
+            failing_tests=[],
+            stdout="",
+            stderr="",
+        )
+        compile_failure = MavenResult(
+            label="repo",
+            exit_code=1,
+            status="test_compile_failure",
+            status_reason="Test sources did not compile.",
+            tests=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            failing_tests=[],
+            stdout="compile failed",
+            stderr="",
+        )
+
+        with (
+            patch("benchmark_pipeline.generation.tests_generation.parse_structured_response", side_effect=[initial, regressed]),
+            patch(
+                "benchmark_pipeline.generation.tests_generation.run_maven_tests",
+                side_effect=[passed_maven_result(), initial_failure, compile_failure],
+            ),
+            redirect_stdout(StringIO()),
+        ):
+            result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=1)
+
+        self.assertIs(result, initial)
+        self.assertEqual(result.repair_outcome, "repair_no_improvement")
+        self.assertEqual(
+            (output_dir / "src/test/java/com/example/AppTest.java").read_text(encoding="utf-8"),
+            test_file_content("InitialTest"),
+        )
+
     def test_generate_verified_repo_repairs_after_failed_build(self) -> None:
         output_dir = self.root / "repo"
         broken = valid_repo("broken")

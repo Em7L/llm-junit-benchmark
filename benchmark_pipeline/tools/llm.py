@@ -5,6 +5,25 @@ from __future__ import annotations
 import os
 from openai import OpenAI
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+
+def reasoning_request_kwargs(model: str) -> dict[str, object]:
+    lower_model = model.lower()
+    if "deepseek" in lower_model:
+        # DeepSeek accepts low for compatibility, but documents that it is mapped to high.
+        return {
+            "reasoning_effort": "low",
+            "extra_body": {"thinking": {"type": "enabled"}},
+        }
+    if "gemini" in lower_model:
+        return {"reasoning_effort": "low"}
+    if lower_model.startswith(("gpt-5", "o1", "o3", "o4", "gpt-oss")):
+        return {"reasoning_effort": "low"}
+    return {}
 
 
 def get_client(model: str) -> OpenAI:
@@ -52,19 +71,21 @@ def parse_structured_response(
 ) -> BaseModel:
     client = get_client(model)
     is_deepseek = "deepseek" in model.lower()
-    is_gemini = "gemini" in model.lower()
 
-    if is_deepseek or is_gemini:
+    if is_deepseek:
         return _parse_with_fallback(client, model, schema, instructions, user_input)
 
     try:
         completion = client.beta.chat.completions.parse(
-            model=model,
-            messages=[
-                {"role": "system", "content": instructions},
-                {"role": "user", "content": user_input},
-            ],
-            response_format=schema,
+            **{
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": instructions},
+                    {"role": "user", "content": user_input},
+                ],
+                "response_format": schema,
+                **reasoning_request_kwargs(model),
+            }
         )
         parsed = completion.choices[0].message.parsed
         if parsed is None:
@@ -77,15 +98,29 @@ def parse_structured_response(
         raise
 
 
-def _parse_with_fallback(client: OpenAI, model: str, schema: type[BaseModel], instructions: str, user_input: str) -> BaseModel:
-    """Universal fallback: use json_object mode and manual pydantic validation."""
+def _parse_with_fallback(
+    client: OpenAI,
+    model: str,
+    schema: type[BaseModel],
+    instructions: str,
+    user_input: str,
+) -> BaseModel:
     response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": f"{instructions}\n\nYou MUST return valid JSON that matches this schema: {schema.model_json_schema()}"},
-            {"role": "user", "content": user_input},
-        ],
-        response_format={"type": "json_object"},
+        **{
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        f"{instructions}\n\n"
+                        f"You MUST return valid JSON that matches this schema: {schema.model_json_schema()}"
+                    ),
+                },
+                {"role": "user", "content": user_input},
+            ],
+            "response_format": {"type": "json_object"},
+            **reasoning_request_kwargs(model),
+        }
     )
     content = response.choices[0].message.content
     if not content:

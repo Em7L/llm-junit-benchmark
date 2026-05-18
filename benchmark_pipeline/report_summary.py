@@ -84,10 +84,17 @@ def summarize_model_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     evaluation_status_counts = Counter(_string_values(rows, "evaluation_status"))
 
     generation_passes = generation_status_counts.get("passed", 0)
+    accepted_rows = [row for row in rows if row.get("generation_status") == "passed"]
     evaluable_rows = sum(1 for row in rows if isinstance(row.get("evaluation_status"), str))
     final_passes = evaluation_status_counts.get("passed", 0)
     repaired_runs = sum(
         1 for row in rows if (_numeric(row.get("repair_attempts")) or 0) > 0
+    )
+    initial_compile_passes = sum(
+        1 for row in accepted_rows if _initial_suite_compiled(row)
+    )
+    final_compile_passes = sum(
+        1 for row in accepted_rows if _final_suite_compiled(row)
     )
 
     final_metric_stats = _metric_stats(rows, row_key=None)
@@ -103,7 +110,9 @@ def summarize_model_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "repair_outcome_counts": dict(repair_outcome_counts),
         "disabling_outcome_counts": dict(disabling_outcome_counts),
         "evaluation_status_counts": dict(evaluation_status_counts),
-        "generation_pass_rate": _safe_rate(generation_passes, len(rows)),
+        "accepted_suite_rate": _safe_rate(generation_passes, len(rows)),
+        "initial_test_compile_rate": _safe_rate(initial_compile_passes, len(accepted_rows)),
+        "final_test_compile_rate": _safe_rate(final_compile_passes, len(accepted_rows)),
         "final_pass_rate": _safe_rate(final_passes, evaluable_rows),
         "repair_needed_rate": _safe_rate(repaired_runs, len(rows)),
         "repaired_run_count": repaired_runs,
@@ -250,6 +259,18 @@ def _safe_rate(numerator: int, denominator: int) -> float | None:
     return (numerator / denominator) if denominator else None
 
 
+def _initial_suite_compiled(row: dict[str, Any]) -> bool:
+    snapshot = row.get("initial_generated_suite")
+    if not isinstance(snapshot, dict):
+        return False
+    return snapshot.get("before_disabling_status") != "test_compile_failure"
+
+
+def _final_suite_compiled(row: dict[str, Any]) -> bool:
+    status = row.get("final_suite_before_disabling_status")
+    return isinstance(status, str) and status != "test_compile_failure"
+
+
 def format_summary_markdown(summary: dict[str, Any]) -> str:
     lines = [
         "# Comparison Report Summary",
@@ -264,8 +285,8 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
                 "",
                 "## Overall Results",
                 "",
-                "| Test model | Runs | Gen pass rate | Final pass rate | Repair needed | Avg line cov. | Avg branch cov. | Avg mutation score |",
-                "|---|---:|---:|---:|---:|---:|---:|---:|",
+                "| Test model | Runs | Accepted suite rate | Initial test compile rate | Final test compile rate | Final pass rate | Repair needed | Avg tests | Avg line cov. | Avg branch cov. | Avg mutation score |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
             ]
         )
         for model, model_summary in sorted(model_summaries.items()):
@@ -275,9 +296,12 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
                     [
                         model,
                         _cell(model_summary.get("run_count")),
-                        _percent(model_summary.get("generation_pass_rate")),
+                        _percent(model_summary.get("accepted_suite_rate")),
+                        _percent(model_summary.get("initial_test_compile_rate")),
+                        _percent(model_summary.get("final_test_compile_rate")),
                         _percent(model_summary.get("final_pass_rate")),
                         _percent(model_summary.get("repair_needed_rate")),
+                        _number(model_summary.get("final_means", {}).get("tests"), 2),
                         _percent(model_summary.get("final_means", {}).get("line_coverage")),
                         _percent(model_summary.get("final_means", {}).get("branch_coverage")),
                         _percent(model_summary.get("final_means", {}).get("mutation_score")),
@@ -285,6 +309,16 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
                 )
                 + " |"
             )
+        lines.extend(
+                [
+                    "",
+                    "Note: `Accepted suite rate` means the pipeline accepted a generated suite artifact for downstream evaluation; it is not a compile metric. "
+                    "`Initial test compile rate` and `Final test compile rate` measure whether the generated test suite compiled before staged disabling. "
+                    "`Final pass rate` uses the benchmark's staged evaluation rule. "
+                    "If generated tests fail on the accepted baseline repository and the failing tests can be identified, "
+                    "those failing generated tests may be disabled in the temporary staged evaluation copy before final coverage and PIT evaluation.",
+                ]
+        )
         lines.extend(_render_compact_variability_table("Overall Variability", model_summaries))
         lines.extend(_render_repair_effects_table("Repair Effects (Repaired Runs Only)", model_summaries))
 
@@ -296,8 +330,8 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
                     "",
                     f"## Profile `{profile_id}`",
                     "",
-                    "| Test model | Runs | Final pass rate | Avg line cov. | Avg branch cov. | Avg mutation score |",
-                    "|---|---:|---:|---:|---:|---:|",
+                    "| Test model | Runs | Initial test compile rate | Final test compile rate | Final pass rate | Repair needed | Avg tests | Avg line cov. | Avg branch cov. | Avg mutation score |",
+                    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
                 ]
             )
             models = profile_summary.get("models", {})
@@ -309,7 +343,11 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
                             [
                                 model,
                                 _cell(model_summary.get("run_count")),
+                                _percent(model_summary.get("initial_test_compile_rate")),
+                                _percent(model_summary.get("final_test_compile_rate")),
                                 _percent(model_summary.get("final_pass_rate")),
+                                _percent(model_summary.get("repair_needed_rate")),
+                                _number(model_summary.get("final_means", {}).get("tests"), 2),
                                 _percent(model_summary.get("final_means", {}).get("line_coverage")),
                                 _percent(model_summary.get("final_means", {}).get("branch_coverage")),
                                 _percent(model_summary.get("final_means", {}).get("mutation_score")),
@@ -317,6 +355,7 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
                         )
                         + " |"
                     )
+                lines.extend(_render_compact_variability_table(f"Profile `{profile_id}` Variability", models))
     return "\n".join(lines)
 
 

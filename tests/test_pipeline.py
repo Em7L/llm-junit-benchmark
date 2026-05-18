@@ -527,6 +527,52 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(comparison["mutant_set"]["only_in_suite"]["_repaired_tests/model-b"], ["mutant-2"])
         self.assertEqual(comparison["mutant_set"]["only_in_suite"]["_repaired_tests/model-c"], ["mutant-3"])
 
+    def test_compile_failed_snapshot_uses_na_for_execution_counts(self) -> None:
+        config = self.config(("model-b",))
+        compile_failed = MavenResult(
+            label="repo",
+            exit_code=1,
+            status="test_compile_failure",
+            status_reason="Test sources did not compile.",
+            tests=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            failing_tests=[],
+            stdout="",
+            stderr="",
+        )
+
+        with (
+            patch("benchmark_pipeline.pipeline.run_baseline_generation", return_value=generated_repo()),
+            patch(
+                "benchmark_pipeline.pipeline.run_test_generation",
+                return_value=GeneratedTests(summary="tests", files=[], repair_outcome="repair_not_needed", repair_attempts=0),
+            ),
+            patch(
+                "benchmark_pipeline.pipeline.run_evaluation",
+                return_value=[
+                    EvaluationSuiteRun(
+                        suite_name="model-b",
+                        suite_dir=config.tests_dir / "_repaired_tests" / "model-b",
+                        pitest_report_dir=config.pitest_report_dir / "_repaired_tests" / "model-b",
+                        outcome=evaluation_outcome(baseline_result=compile_failed),
+                    )
+                ],
+            ),
+            redirect_stdout(StringIO()),
+        ):
+            run_pipeline(config)
+
+        comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
+        row = comparison["rows"][0]
+        self.assertIsNone(row["final_generated_suite"]["before_tests"])
+        self.assertIsNone(row["final_generated_suite"]["before_failures"])
+        self.assertIsNone(row["final_generated_suite"]["before_errors"])
+        self.assertIsNone(row["final_generated_suite"]["after_tests"])
+        comparison_markdown = (config.report_md.parent / "comparison_report.md").read_text(encoding="utf-8")
+        self.assertIn("| model-b | test_compile_failure | N/A | N/A | N/A |", comparison_markdown)
+
     def test_run_pipeline_writes_comparison_report_when_all_test_models_fail(self) -> None:
         config = self.config(("model-b", "model-c"))
 

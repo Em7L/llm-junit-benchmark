@@ -18,6 +18,9 @@ from benchmark_pipeline.fs_utils import dump_json
 from benchmark_pipeline.models import GeneratedTests
 
 
+EXECUTED_TEST_STATUSES = {"passed", "test_failures", "test_execution_failure"}
+
+
 def write_comparison_reports(
     *,
     repo_model: str,
@@ -170,18 +173,20 @@ def evaluation_snapshot(outcome: object | None) -> dict[str, object] | None:
         disabled_tests=outcome.disabled_tests,
         initial_baseline_result=outcome.initial_baseline_result,
     )
+    before_counts = execution_counts(before_result)
+    after_counts = execution_counts(outcome.baseline_result)
     return {
         "before_disabling_status": before_result.status,
-        "before_tests": before_result.tests,
-        "before_failures": before_result.failures,
-        "before_errors": before_result.errors,
-        "before_skipped": before_result.skipped,
+        "before_tests": before_counts["tests"],
+        "before_failures": before_counts["failures"],
+        "before_errors": before_counts["errors"],
+        "before_skipped": before_counts["skipped"],
         "disabling_outcome": disabling,
         "after_disabling_status": outcome.baseline_result.status,
-        "after_tests": outcome.baseline_result.tests,
-        "after_failures": outcome.baseline_result.failures,
-        "after_errors": outcome.baseline_result.errors,
-        "after_skipped": outcome.baseline_result.skipped,
+        "after_tests": after_counts["tests"],
+        "after_failures": after_counts["failures"],
+        "after_errors": after_counts["errors"],
+        "after_skipped": after_counts["skipped"],
         "disabled_tests": len(outcome.disabled_tests),
         "line_coverage": coverage.line_rate if coverage is not None else None,
         "branch_coverage": coverage.branch_rate if coverage is not None else None,
@@ -191,6 +196,23 @@ def evaluation_snapshot(outcome: object | None) -> dict[str, object] | None:
         "survived": pitest.status_counts.get("SURVIVED", 0) if pitest is not None else None,
         "no_coverage": pitest.status_counts.get("NO_COVERAGE", 0) if pitest is not None else None,
         "mutation_score": pitest.mutation_score if pitest is not None else None,
+    }
+
+
+def execution_counts(result: object) -> dict[str, int | None]:
+    status = getattr(result, "status", None)
+    if status not in EXECUTED_TEST_STATUSES:
+        return {
+            "tests": None,
+            "failures": None,
+            "errors": None,
+            "skipped": None,
+        }
+    return {
+        "tests": getattr(result, "tests", None),
+        "failures": getattr(result, "failures", None),
+        "errors": getattr(result, "errors", None),
+        "skipped": getattr(result, "skipped", None),
     }
 
 
