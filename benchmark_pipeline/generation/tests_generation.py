@@ -6,7 +6,12 @@ from pathlib import Path
 import shutil
 
 from benchmark_pipeline.classifications import classify_repair
-from benchmark_pipeline.fs_utils import reset_directory, stage_repo_with_tests, write_artifacts
+from benchmark_pipeline.fs_utils import (
+    reset_directory,
+    stage_repo_with_artifacts,
+    stage_repo_with_tests,
+    write_artifacts,
+)
 from benchmark_pipeline.generation.prompts import build_test_prompt, build_test_repair_prompt
 from benchmark_pipeline.generation.validation import OutputValidationError, validate_generated_tests
 from benchmark_pipeline.models import GeneratedTests, MavenResult
@@ -94,6 +99,15 @@ def generate_tests(
             previous = parsed
             repair_attempts += 1
             repair_reasons.append("semantic_validation")
+            semantic_repair_root = stage_repo_with_artifacts(repo_dir, parsed.files)
+            try:
+                semantic_repair_context = build_test_repair_prompt(
+                    repo_root=semantic_repair_root,
+                    build_output=str(exc),
+                )
+            finally:
+                if semantic_repair_root.exists():
+                    shutil.rmtree(semantic_repair_root, ignore_errors=True)
             parsed = parse_structured_response(
                 model=model,
                 schema=GeneratedTests,
@@ -101,10 +115,7 @@ def generate_tests(
                     "Repair the JUnit 5 test suite so it matches the expected Maven test structure. "
                     "Return only structured data that matches the schema."
                 ),
-                user_input=build_test_repair_prompt(
-                    repo_root=repo_dir,
-                    build_output=str(exc),
-                ),
+                user_input=semantic_repair_context,
             )
             try:
                 validate_repair_did_not_drop_suite(previous, parsed)

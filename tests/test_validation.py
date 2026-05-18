@@ -13,6 +13,19 @@ from benchmark_pipeline.generation.validation import (
 
 
 class TestValidation(unittest.TestCase):
+    def valid_test_content(self, class_name: str = "AppTest") -> str:
+        return (
+            "package com.example;\n\n"
+            "import org.junit.jupiter.api.Test;\n\n"
+            "import static org.junit.jupiter.api.Assertions.assertTrue;\n\n"
+            f"class {class_name} {{\n"
+            "    @Test\n"
+            "    void generatedTest() {\n"
+            "        assertTrue(true);\n"
+            "    }\n"
+            "}\n"
+        )
+
     def test_valid_repo_passes_semantic_validation(self) -> None:
         repo = GeneratedRepo(
             project_name="demo",
@@ -85,7 +98,10 @@ class TestValidation(unittest.TestCase):
         tests = GeneratedTests(
             summary="demo",
             files=[
-                FileArtifact(path="src/main/java/com/example/AppTest.java", content="class AppTest {}"),
+                FileArtifact(
+                    path="src/main/java/com/example/AppTest.java",
+                    content=self.valid_test_content(),
+                ),
             ],
         )
 
@@ -102,6 +118,29 @@ class TestValidation(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(OutputValidationError, "Duplicate file paths"):
+            validate_generated_tests(tests)
+
+    def test_generated_tests_reject_placeholder_suite_without_assertions(self) -> None:
+        tests = GeneratedTests(
+            summary="demo",
+            files=[
+                FileArtifact(
+                    path="src/test/java/com/example/AppTest.java",
+                    content=(
+                        "package com.example;\n\n"
+                        "import org.junit.jupiter.api.Test;\n\n"
+                        "class AppTest {\n"
+                        "    @Test\n"
+                        "    void placeholder() {\n"
+                        "        // TODO add real checks\n"
+                        "    }\n"
+                        "}\n"
+                    ),
+                ),
+            ],
+        )
+
+        with self.assertRaisesRegex(OutputValidationError, "assertions or failure checks"):
             validate_generated_tests(tests)
 
 

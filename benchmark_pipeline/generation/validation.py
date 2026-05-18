@@ -3,6 +3,7 @@ from __future__ import annotations
 """Semantic validators for model outputs before they are written or executed."""
 
 from collections import Counter
+import re
 
 from benchmark_pipeline.models import GeneratedRepo, GeneratedTests
 
@@ -45,9 +46,39 @@ def validate_generated_tests(tests: GeneratedTests) -> None:
             f"Expected only Java test files under src/test/java, got: {preview}"
         )
 
+    contents = [_strip_java_comments(artifact.content) for artifact in tests.files]
+
+    if not any(_contains_junit_test_annotation(content) for content in contents):
+        raise OutputValidationError(
+            "Generated test suite does not appear to contain any JUnit test methods. "
+            "Include executable JUnit 5 tests annotated with @Test or a related JUnit 5 test annotation."
+        )
+
+    if not any(_contains_assertion_or_failure_check(content) for content in contents):
+        raise OutputValidationError(
+            "Generated test suite does not appear to contain any assertions or failure checks. "
+            "Return behavior-checking tests, not empty placeholder methods."
+        )
+
 
 def _validate_unique_paths(paths: list[str], label: str) -> None:
     duplicates = sorted(path for path, count in Counter(paths).items() if count > 1)
     if duplicates:
         preview = ", ".join(duplicates[:3])
         raise OutputValidationError(f"Duplicate file paths found in generated {label}: {preview}")
+
+
+def _strip_java_comments(text: str) -> str:
+    without_block_comments = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    return re.sub(r"//.*", "", without_block_comments)
+
+
+def _contains_junit_test_annotation(content: str) -> bool:
+    return bool(re.search(r"@(?:Test|ParameterizedTest|RepeatedTest|TestFactory|TestTemplate)\b", content))
+
+
+def _contains_assertion_or_failure_check(content: str) -> bool:
+    return bool(
+        re.search(r"\b(?:assert[A-Za-z0-9_]*|assertThat|fail)\s*\(", content)
+        or re.search(r"\bAssertions\.(?:assert[A-Za-z0-9_]*|assertThat|fail)\s*\(", content)
+    )

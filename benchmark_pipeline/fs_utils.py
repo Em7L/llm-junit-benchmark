@@ -112,6 +112,16 @@ def stage_repo_with_tests(repo_root: Path, tests_root: Path) -> Path:
     return temp_dir
 
 
+def stage_repo_with_artifacts(repo_root: Path, files: Sequence[FileArtifact]) -> Path:
+    staging_root = repo_root.parent / ".staging"
+    staging_root.mkdir(parents=True, exist_ok=True)
+    temp_dir = staging_root / f"agent-eval-{uuid4().hex[:8]}"
+    temp_dir.mkdir(parents=True, exist_ok=False)
+    copy_tree_into(repo_root, temp_dir)
+    write_artifacts(temp_dir, files)
+    return temp_dir
+
+
 def dump_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

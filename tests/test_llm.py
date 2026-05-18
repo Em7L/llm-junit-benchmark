@@ -69,6 +69,43 @@ class TestLlmStructuredResponse(unittest.TestCase):
                     user_input="user prompt",
                 )
 
+    def test_openai_model_falls_back_when_native_parse_is_unavailable(self) -> None:
+        response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content='{"summary":"ok","files":[],"assumptions":[],"repair_attempts":0,"repair_outcome":"repair_not_needed","repair_reasons":[]}'
+                    )
+                )
+            ]
+        )
+        client = SimpleNamespace(
+            beta=SimpleNamespace(
+                chat=SimpleNamespace(
+                    completions=SimpleNamespace(parse=Mock(side_effect=RuntimeError("response_format unavailable")))
+                )
+            ),
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(create=Mock(return_value=response))
+            )
+        )
+
+        with patch("benchmark_pipeline.tools.llm.get_client", return_value=client):
+            result = parse_structured_response(
+                model="test-model",
+                schema=GeneratedTests,
+                instructions="system instructions",
+                user_input="user prompt",
+            )
+
+        self.assertIsInstance(result, GeneratedTests)
+        self.assertEqual(result.summary, "ok")
+        client.chat.completions.create.assert_called_once()
+        kwargs = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(kwargs["model"], "test-model")
+        self.assertEqual(kwargs["response_format"], {"type": "json_object"})
+        self.assertIn("matches this schema", kwargs["messages"][0]["content"])
+
 
 if __name__ == "__main__":
     unittest.main()

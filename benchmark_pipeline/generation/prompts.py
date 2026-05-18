@@ -147,6 +147,26 @@ def build_test_prompt(repo_root: Path) -> str:
         - Target meaningful branch coverage, not just method invocation coverage.
         - Add tests that are likely to detect semantic mistakes in formulas, thresholds, validation rules, and formatting.
         - Keep the suite deterministic.
+        - Do not return placeholder tests or example-only stubs.
+        - Do not use tautological assertions such as `assertTrue(true)`, `assertFalse(false)`, or assertions that only restate literals.
+        - Every test method must instantiate production objects, call production methods, or verify exceptions from the production API.
+        - Each test file should contain real behavior checks about returned values, state changes, exceptions, or formatted output.
+
+        Bad example:
+        ```java
+        @Test
+        void exampleTest() {{
+            assertTrue(true);
+        }}
+        ```
+
+        Better example:
+        ```java
+        @Test
+        void rejectsInvalidInput() {{
+            assertThrows(IllegalArgumentException.class, () -> new SomeProductionType("", 0));
+        }}
+        ```
         """
     ).strip()
 
@@ -181,5 +201,9 @@ def build_test_repair_prompt(repo_root: Path, build_output: str) -> str:
         - Do not modify production code.
         - Do not invent classes, methods, constructors, or fields that do not exist in the production code.
         - Do not subclass final production classes or override methods unless the production code is explicitly designed for inheritance.
+        - Replace placeholder tests with real behavior checks against the production API.
+        - Do not use tautological assertions such as `assertTrue(true)`, `assertFalse(false)`, or assertions that only restate literals.
+        - Every test method must instantiate production objects, call production methods, or verify exceptions from the production API.
+        - Preserve the full suite and repair weak tests in place rather than dropping files.
         """
     ).strip()

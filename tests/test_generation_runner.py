@@ -31,7 +31,22 @@ def generated_repo() -> GeneratedRepo:
 def generated_tests() -> GeneratedTests:
     return GeneratedTests(
         summary="tests",
-        files=[FileArtifact(path="src/test/java/com/example/AppTest.java", content="class AppTest {}")],
+        files=[
+            FileArtifact(
+                path="src/test/java/com/example/AppTest.java",
+                content=(
+                    "package com.example;\n\n"
+                    "import org.junit.jupiter.api.Test;\n\n"
+                    "import static org.junit.jupiter.api.Assertions.assertTrue;\n\n"
+                    "class AppTest {\n"
+                    "    @Test\n"
+                    "    void generatedTest() {\n"
+                    "        assertTrue(true);\n"
+                    "    }\n"
+                    "}\n"
+                ),
+            )
+        ],
     )
 
 

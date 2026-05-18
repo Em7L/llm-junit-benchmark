@@ -14,6 +14,20 @@ from benchmark_pipeline.generation.repo_generation import generate_verified_repo
 from benchmark_pipeline.generation.tests_generation import generate_tests
 
 
+def test_file_content(class_name: str) -> str:
+    return (
+        "package com.example;\n\n"
+        "import org.junit.jupiter.api.Test;\n\n"
+        "import static org.junit.jupiter.api.Assertions.assertTrue;\n\n"
+        f"class {class_name} {{\n"
+        "    @Test\n"
+        "    void generatedTest() {\n"
+        "        assertTrue(true);\n"
+        "    }\n"
+        "}\n"
+    )
+
+
 def passed_maven_result() -> MavenResult:
     return MavenResult(
         label="repo",
@@ -78,7 +92,7 @@ class TestGenerationOrchestration(unittest.TestCase):
             files=[
                 FileArtifact(
                     path="src/test/java/com/example/AppTest.java",
-                    content="class AppTest {}",
+                    content=test_file_content("AppTest"),
                 )
             ],
         )
@@ -95,7 +109,7 @@ class TestGenerationOrchestration(unittest.TestCase):
         self.assertEqual(result.repair_attempts, 0)
         self.assertEqual(
             (output_dir / "src/test/java/com/example/AppTest.java").read_text(encoding="utf-8"),
-            "class AppTest {}",
+            test_file_content("AppTest"),
         )
 
     def test_generate_tests_rejects_invalid_model_output_before_overwriting_previous_output(self) -> None:
@@ -110,7 +124,7 @@ class TestGenerationOrchestration(unittest.TestCase):
             files=[
                 FileArtifact(
                     path="src/main/java/com/example/AppTest.java",
-                    content="class AppTest {}",
+                    content=test_file_content("AppTest"),
                 )
             ],
         )
@@ -134,7 +148,7 @@ class TestGenerationOrchestration(unittest.TestCase):
             files=[
                 FileArtifact(
                     path="src/main/java/com/example/AppTest.java",
-                    content="class AppTest {}",
+                    content=test_file_content("AppTest"),
                 )
             ],
         )
@@ -143,7 +157,7 @@ class TestGenerationOrchestration(unittest.TestCase):
             files=[
                 FileArtifact(
                     path="src/test/java/com/example/AppTest.java",
-                    content="class AppTest {}",
+                    content=test_file_content("AppTest"),
                 )
             ],
         )
@@ -159,6 +173,9 @@ class TestGenerationOrchestration(unittest.TestCase):
         self.assertEqual(parse.call_count, 2)
         self.assertEqual(run_maven_tests.call_count, 2)
         self.assertTrue((output_dir / "src/test/java/com/example/AppTest.java").exists())
+        semantic_repair_prompt = parse.call_args_list[1].kwargs["user_input"]
+        self.assertIn("Here are the repository files (including the failing tests):", semantic_repair_prompt)
+        self.assertIn("FILE: src/main/java/com/example/AppTest.java", semantic_repair_prompt)
 
     def test_generate_tests_fails_after_semantic_repair_budget_is_exhausted(self) -> None:
         repo_dir = self.root / "repo"
@@ -169,7 +186,7 @@ class TestGenerationOrchestration(unittest.TestCase):
             files=[
                 FileArtifact(
                     path="src/main/java/com/example/AppTest.java",
-                    content="class AppTest {}",
+                    content=test_file_content("AppTest"),
                 )
             ],
         )
@@ -193,13 +210,13 @@ class TestGenerationOrchestration(unittest.TestCase):
         broken = GeneratedTests(
             summary="broken tests",
             files=[
-                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class BrokenTest {}")
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("BrokenTest"))
             ],
         )
         repaired = GeneratedTests(
             summary="repaired tests",
             files=[
-                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class AppTest {}")
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("AppTest"))
             ],
         )
 
@@ -220,7 +237,7 @@ class TestGenerationOrchestration(unittest.TestCase):
         self.assertEqual(parse.call_count, 2)
         self.assertEqual(run_maven_tests.call_count, 3)
         repair_prompt = parse.call_args_list[1].kwargs["user_input"]
-        self.assertIn("class BrokenTest {}", repair_prompt)
+        self.assertIn("class BrokenTest", repair_prompt)
 
     def test_generate_tests_skips_full_test_when_test_compile_fails(self) -> None:
         repo_dir = self.root / "repo"
@@ -229,7 +246,7 @@ class TestGenerationOrchestration(unittest.TestCase):
         broken = GeneratedTests(
             summary="broken tests",
             files=[
-                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class BrokenTest {}")
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("BrokenTest"))
             ],
         )
         compile_failure = MavenResult(
@@ -264,21 +281,21 @@ class TestGenerationOrchestration(unittest.TestCase):
         broken = GeneratedTests(
             summary="broken tests",
             files=[
-                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class BrokenAppTest {}"),
-                FileArtifact(path="src/test/java/com/example/ServiceTest.java", content="class BrokenServiceTest {}"),
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("BrokenAppTest")),
+                FileArtifact(path="src/test/java/com/example/ServiceTest.java", content=test_file_content("BrokenServiceTest")),
             ],
         )
         incomplete_repair = GeneratedTests(
             summary="incomplete repair",
             files=[
-                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class AppTest {}"),
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("AppTest")),
             ],
         )
         complete_repair = GeneratedTests(
             summary="complete repair",
             files=[
-                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class AppTest {}"),
-                FileArtifact(path="src/test/java/com/example/ServiceTest.java", content="class ServiceTest {}"),
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("AppTest")),
+                FileArtifact(path="src/test/java/com/example/ServiceTest.java", content=test_file_content("ServiceTest")),
             ],
         )
 
@@ -308,14 +325,14 @@ class TestGenerationOrchestration(unittest.TestCase):
         broken = GeneratedTests(
             summary="broken tests",
             files=[
-                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class BrokenAppTest {}"),
-                FileArtifact(path="src/test/java/com/example/ServiceTest.java", content="class BrokenServiceTest {}"),
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("BrokenAppTest")),
+                FileArtifact(path="src/test/java/com/example/ServiceTest.java", content=test_file_content("BrokenServiceTest")),
             ],
         )
         incomplete_repair = GeneratedTests(
             summary="incomplete repair",
             files=[
-                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class AppTest {}"),
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("AppTest")),
             ],
         )
 
@@ -333,7 +350,7 @@ class TestGenerationOrchestration(unittest.TestCase):
         self.assertEqual(run_maven_tests.call_count, 1)
         self.assertEqual(
             (output_dir / "src/test/java/com/example/AppTest.java").read_text(encoding="utf-8"),
-            "class BrokenAppTest {}",
+            test_file_content("BrokenAppTest"),
         )
         self.assertTrue((output_dir / "src/test/java/com/example/ServiceTest.java").exists())
 
@@ -344,13 +361,13 @@ class TestGenerationOrchestration(unittest.TestCase):
         broken = GeneratedTests(
             summary="broken tests",
             files=[
-                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class BrokenTest {}")
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("BrokenTest"))
             ],
         )
         repaired = GeneratedTests(
             summary="still failing tests",
             files=[
-                FileArtifact(path="src/test/java/com/example/AppTest.java", content="class LessBrokenTest {}")
+                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("LessBrokenTest"))
             ],
         )
         initial_failure = MavenResult(
