@@ -300,7 +300,7 @@ def comparison_markdown(payload: dict[str, object]) -> str:
     if has_repair_attempts:
         lines.extend(
             render_comparison_table(
-                title="Final Repaired Suite",
+                title="Final Selected Suite",
                 rows=rows,
                 snapshot_key="final_generated_suite",
             )

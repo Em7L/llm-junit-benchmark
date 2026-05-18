@@ -88,7 +88,7 @@ The full pipeline does the following:
 Use `run_pipeline.py --profile-id ... --tests-models ...` for the main experiment. The pipeline generates one baseline repository and then creates one generated test suite per test model under:
 
 ```text
-artifacts/runs/<model-combination>/run-N/generated_tests/_repaired_tests/<model-name>/
+artifacts/runs/<model-combination>/run-N/generated_tests/_final_selected/<model-name>/
 ```
 
 Evaluation then compares all generated suites against the same baseline repository under the same Maven, JaCoCo, and PIT procedure.
@@ -109,14 +109,14 @@ By default this scans `artifacts/runs/` and writes:
 The main generated files and folders are:
 
 - `artifacts/runs/<model-combination>/run-N/baseline_repo/`: generated Java Maven repository
-- `artifacts/runs/<model-combination>/run-N/generated_tests/_repaired_tests/<model-name>/`: generated JUnit 5 tests for each test model after repair handling
-- `artifacts/runs/<model-combination>/run-N/generated_tests/_initial_tests/<model-name>/`: preserved initial pre-repair test-suite snapshot when repair is attempted
+- `artifacts/runs/<model-combination>/run-N/generated_tests/_final_selected/<model-name>/`: final selected generated JUnit 5 test suite used for evaluation
+- `artifacts/runs/<model-combination>/run-N/generated_tests/_initial_snapshot/<model-name>/`: preserved initial pre-repair test-suite snapshot when repair is attempted
 - `artifacts/runs/<model-combination>/run-N/manifests/`: structured LLM responses saved as JSON
 - `artifacts/runs/<model-combination>/run-N/manifests/benchmark_profile.json`: selected benchmark profile for the run
 - `artifacts/runs/<model-combination>/run-N/reports/comparison_report.json`: machine-readable comparison report
 - `artifacts/runs/<model-combination>/run-N/reports/comparison_report.md`: Markdown comparison table across test models
-- `artifacts/runs/<model-combination>/run-N/reports/pit-reports/_repaired_tests/<model-name>/`: copied PIT XML/HTML reports for final evaluated suites
-- `artifacts/runs/<model-combination>/run-N/reports/pit-reports/_initial_tests/<model-name>/`: copied PIT XML/HTML reports for initial suite snapshots
+- `artifacts/runs/<model-combination>/run-N/reports/pit-reports/_final_selected/<model-name>/`: copied PIT XML/HTML reports for final evaluated suites
+- `artifacts/runs/<model-combination>/run-N/reports/pit-reports/_initial_snapshot/<model-name>/`: copied PIT XML/HTML reports for initial suite snapshots
 
 Temporary staged repositories are created under each run directory's `.staging/` folder during evaluation and can be deleted after a run.
 

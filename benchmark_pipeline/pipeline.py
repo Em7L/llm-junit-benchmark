@@ -102,14 +102,14 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     generated_tests: dict[str, GeneratedTests] = {}
     test_generation_errors: dict[str, str] = {}
     suite_names = {model: safe_model_name(model) for model in config.tests_models}
-    repaired_tests_root = config.tests_dir / "_repaired_tests"
-    initial_tests_root = config.tests_dir / "_initial_tests"
+    final_selected_tests_root = config.tests_dir / "_final_selected"
+    initial_snapshot_tests_root = config.tests_dir / "_initial_snapshot"
     reset_directory(config.tests_dir)
-    repaired_tests_root.mkdir(parents=True, exist_ok=True)
-    initial_tests_root.mkdir(parents=True, exist_ok=True)
+    final_selected_tests_root.mkdir(parents=True, exist_ok=True)
+    initial_snapshot_tests_root.mkdir(parents=True, exist_ok=True)
     def generate_for_model(model: str) -> tuple[str, GeneratedTests | None, str | None]:
         suite_name = suite_names[model]
-        suite_dir = repaired_tests_root / suite_name
+        suite_dir = final_selected_tests_root / suite_name
         try:
             tests = run_test_generation(
                 TestGenerationConfig(
@@ -118,14 +118,14 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
                     model=model,
                     manifest_path=test_manifest_path(config.tests_manifest, suite_name, len(config.tests_models) > 1),
                     max_repairs=config.max_repairs,
-                    initial_output_dir=initial_tests_root / suite_name,
+                    initial_output_dir=initial_snapshot_tests_root / suite_name,
                 )
             )
             return (model, tests, None)
         except Exception as exc:
             if suite_dir.exists():
                 shutil.rmtree(suite_dir, ignore_errors=True)
-            initial_suite_dir = initial_tests_root / suite_name
+            initial_suite_dir = initial_snapshot_tests_root / suite_name
             if initial_suite_dir.exists():
                 shutil.rmtree(initial_suite_dir, ignore_errors=True)
             print(f"[pipeline] Test generation failed for `{model}`: {exc}")
@@ -171,8 +171,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     print_step("PIT evaluation")
     evaluations = run_evaluation_for_suites(
         baseline_repo=config.baseline_repo,
-        tests_dir=repaired_tests_root,
-        pitest_report_dir=config.pitest_report_dir / "_repaired_tests",
+        tests_dir=final_selected_tests_root,
+        pitest_report_dir=config.pitest_report_dir / "_final_selected",
         maven_cmd=config.maven_cmd,
     )
     evaluations_by_suite = evaluation_map_by_suite_name(evaluations)
@@ -181,10 +181,10 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
         if generated.repair_attempts == 0:
             continue
         suite_name = suite_names[model]
-        initial_suite_dir = initial_tests_root / suite_name
+        initial_suite_dir = initial_snapshot_tests_root / suite_name
         if not initial_suite_dir.exists():
             continue
-        final_suite_dir = repaired_tests_root / suite_name
+        final_suite_dir = final_selected_tests_root / suite_name
         if final_suite_dir.exists() and directories_match(initial_suite_dir, final_suite_dir):
             print(
                 f"[pipeline] Reusing final evaluation for `{model}` because the initial and final suites are identical."
@@ -196,7 +196,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
         initial_evaluation = run_evaluation_for_suites(
             baseline_repo=config.baseline_repo,
             tests_dir=initial_suite_dir,
-            pitest_report_dir=config.pitest_report_dir / "_initial_tests" / suite_name,
+            pitest_report_dir=config.pitest_report_dir / "_initial_snapshot" / suite_name,
             maven_cmd=config.maven_cmd,
         )
         if initial_evaluation:
