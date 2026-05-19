@@ -341,11 +341,11 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
         lines.extend(
                 [
                     "",
-                    "Note: `Accepted suite rate` means the pipeline accepted a generated suite artifact for downstream evaluation; it is not a compile metric. "
-                    "`Initial test compile rate` and `Final test compile rate` measure whether the generated test suite compiled before staged disabling. "
+                    "Note: `Accepted suite rate` means the pipeline accepted a generated test suite for downstream evaluation; it is not a compile metric. "
+                    "`Initial test compile rate` and `Final test compile rate` measure whether the initial generated test suite and final generated test suite compiled before staged disabling. "
                     "`Final pass rate` uses the benchmark's staged evaluation rule. "
                     "If generated tests fail on the accepted baseline repository and the failing tests can be identified, "
-                    "those failing generated tests may be disabled in the temporary staged evaluation copy before final coverage and PIT evaluation.",
+                    "those failing generated tests may be disabled in the temporary staged evaluation copy before final evaluation, coverage, and PIT measurement.",
                 ]
         )
         lines.extend(_render_compact_variability_table("Overall Variability", model_summaries))

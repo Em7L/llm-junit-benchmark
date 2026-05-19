@@ -16,7 +16,7 @@ from benchmark_pipeline.tools.pitest import (
 
 class TestPitestConfig(unittest.TestCase):
     def setUp(self) -> None:
-        self.root = Path("artifacts/.unit-tests/pitest-config")
+        self.root = Path("run_outputs/.unit-tests/pitest-config")
         if self.root.exists():
             shutil.rmtree(self.root)
         self.root.mkdir(parents=True)

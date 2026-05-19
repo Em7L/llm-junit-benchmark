@@ -11,7 +11,7 @@ from benchmark_pipeline.evaluation.test_cleaning import disable_baseline_failing
 
 class TestTestCleaning(unittest.TestCase):
     def setUp(self) -> None:
-        self.root = Path("artifacts/.unit-tests/test-cleaning")
+        self.root = Path("run_outputs/.unit-tests/test-cleaning")
         if self.root.exists():
             shutil.rmtree(self.root)
         self.root.mkdir(parents=True)

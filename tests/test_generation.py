@@ -74,7 +74,7 @@ def valid_repo(project_name: str = "demo") -> GeneratedRepo:
 
 class TestGenerationOrchestration(unittest.TestCase):
     def setUp(self) -> None:
-        self.root = Path("artifacts/.unit-tests/generation")
+        self.root = Path("run_outputs/.unit-tests/generation")
         if self.root.exists():
             shutil.rmtree(self.root)
         self.root.mkdir(parents=True)

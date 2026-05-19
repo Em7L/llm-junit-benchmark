@@ -91,7 +91,7 @@ def pitest_mutation(mutant_id: str) -> PitestMutation:
 
 class TestPipeline(unittest.TestCase):
     def setUp(self) -> None:
-        self.root = Path("artifacts/.unit-tests/pipeline")
+        self.root = Path("run_outputs/.unit-tests/pipeline")
         if self.root.exists():
             shutil.rmtree(self.root)
         self.root.mkdir(parents=True)
@@ -431,7 +431,7 @@ class TestPipeline(unittest.TestCase):
 
         self.assertIn("- Repository model: `repo-model`", markdown)
         self.assertIn("- Benchmark profile: `low`", markdown)
-        self.assertIn("## Evaluated Suite", markdown)
+        self.assertIn("## Final Evaluated Test Suite", markdown)
         self.assertIn("| model-b | passed | 7 | 0 | 0 |", markdown)
         self.assertIn("Comparable PIT suites: `1`", markdown)
         self.assertIn("Common mutant IDs: `2`", markdown)
@@ -527,8 +527,8 @@ class TestPipeline(unittest.TestCase):
         )
         comparison_markdown = (config.report_md.parent / "comparison_report.md").read_text(encoding="utf-8")
         self.assertIn("## Generation And Repair Summary", comparison_markdown)
-        self.assertIn("## Initial Generated Suite", comparison_markdown)
-        self.assertIn("## Final Selected Suite", comparison_markdown)
+        self.assertIn("## Initial Evaluated Test Suite", comparison_markdown)
+        self.assertIn("## Final Evaluated Test Suite", comparison_markdown)
         self.assertIn("| Test model | Generation | Repair | Repair tries |", comparison_markdown)
         self.assertIn(
             "| Test model | Status | Tests | Test Failures | Test Errors | Line cov. |",
@@ -666,7 +666,7 @@ class TestPipeline(unittest.TestCase):
         self.assertIsNone(row["final_generated_suite"]["before_errors"])
         self.assertIsNone(row["final_generated_suite"]["after_tests"])
         comparison_markdown = (config.report_md.parent / "comparison_report.md").read_text(encoding="utf-8")
-        self.assertIn("## Evaluated Suite", comparison_markdown)
+        self.assertIn("## Final Evaluated Test Suite", comparison_markdown)
         self.assertIn("| model-b | test_compile_failure | N/A | N/A | N/A |", comparison_markdown)
 
     def test_run_pipeline_writes_comparison_report_when_all_test_models_fail(self) -> None:
@@ -697,16 +697,16 @@ class TestPipeline(unittest.TestCase):
 
     def test_test_manifest_path_supports_directory_or_single_file_paths(self) -> None:
         self.assertEqual(
-            test_manifest_path(Path("artifacts/manifests/generated_tests.json"), "model-a", is_multi_model=False),
-            Path("artifacts/manifests/generated_tests.json"),
+            test_manifest_path(Path("run_outputs/manifests/generated_tests.json"), "model-a", is_multi_model=False),
+            Path("run_outputs/manifests/generated_tests.json"),
         )
         self.assertEqual(
-            test_manifest_path(Path("artifacts/manifests/generated_tests.json"), "model-a", is_multi_model=True),
-            Path("artifacts/manifests/generated_tests_model-a.json"),
+            test_manifest_path(Path("run_outputs/manifests/generated_tests.json"), "model-a", is_multi_model=True),
+            Path("run_outputs/manifests/generated_tests_model-a.json"),
         )
         self.assertEqual(
-            test_manifest_path(Path("artifacts/manifests/generated_tests"), "model-a", is_multi_model=True),
-            Path("artifacts/manifests/generated_tests/model-a_tests.json"),
+            test_manifest_path(Path("run_outputs/manifests/generated_tests"), "model-a", is_multi_model=True),
+            Path("run_outputs/manifests/generated_tests/model-a_tests.json"),
         )
 
 

@@ -49,8 +49,8 @@ python run_pipeline.py --profile-id low
 By default, each full pipeline run is preserved under a new run directory:
 
 ```text
-artifacts/runs/profile-<profile-id>__repo-<repo-model>__tests-<test-models>/run-001/
-artifacts/runs/profile-<profile-id>__repo-<repo-model>__tests-<test-models>/run-002/
+run_outputs/runs/profile-<profile-id>__repo-<repo-model>__tests-<test-models>/run-001/
+run_outputs/runs/profile-<profile-id>__repo-<repo-model>__tests-<test-models>/run-002/
 ```
 
 Run with explicit models:
@@ -82,7 +82,7 @@ The full pipeline does the following:
 8. If a generated test suite fails semantic validation, it is repaired as a complete suite.
 9. If a generated test suite compiles or verifies poorly, verification-time repair may return only the changed test files; those updates are merged into the previously generated suite before re-verification.
 10. Disables generated test methods that fail against the baseline, because the baseline is treated as the reference implementation for the experiment.
-11. Runs JaCoCo coverage and PIT mutation testing on each cleaned test suite.
+11. Runs JaCoCo coverage and PIT mutation testing on each final evaluated test suite.
 12. Writes comparison JSON/Markdown reports and copied PIT reports under the run directory.
 
 ## Compare Multiple Test Models
@@ -90,7 +90,7 @@ The full pipeline does the following:
 Use `run_pipeline.py --profile-id ... --tests-models ...` when you want one preserved comparison run. The pipeline generates one baseline repository and then creates one generated test suite per test model under:
 
 ```text
-artifacts/runs/<model-combination>/run-N/generated_tests/_final_selected/<model-name>/
+run_outputs/runs/<model-combination>/run-N/generated_tests/_final_selected/<model-name>/
 ```
 
 Evaluation then compares all generated suites against the same baseline repository under the same Maven, JaCoCo, and PIT procedure.
@@ -132,7 +132,7 @@ Matrix runner behavior:
 - Existing preserved `run-*` directories are used to infer progress for each condition.
 - The runner only executes the missing runs needed to reach the target repetition count.
 - `--dry-run` prints the plan without executing pipeline runs.
-- A timing summary is written to `artifacts/runs/experiment_timing_summary.json` by default.
+- A timing summary is written to `run_outputs/runs/experiment_timing_summary.json` by default.
 - If a provider quota / credit / rate-limit failure is detected during a run, that current `run-*` directory is deleted and the script stops immediately.
 
 Operational note:
@@ -145,33 +145,33 @@ To aggregate many preserved `comparison_report.json` files into one study-level 
 python summarize_comparison_reports.py
 ```
 
-By default this scans `artifacts/runs/` and writes:
+By default this scans `run_outputs/runs/` and writes:
 
-- `artifacts/summary/comparison_reports_summary.json`
-- `artifacts/summary/comparison_reports_summary.md`
+- `run_outputs/summary/comparison_reports_summary.json`
+- `run_outputs/summary/comparison_reports_summary.md`
 
 ## Outputs
 
 The main generated files and folders are:
 
-- `artifacts/runs/<model-combination>/run-N/baseline_repo/`: generated Java Maven repository
-- `artifacts/runs/<model-combination>/run-N/generated_tests/_final_selected/<model-name>/`: final selected generated JUnit 5 test suite used for evaluation
-- `artifacts/runs/<model-combination>/run-N/generated_tests/_initial_snapshot/<model-name>/`: preserved initial pre-repair test-suite snapshot when repair is attempted
-- `artifacts/runs/<model-combination>/run-N/manifests/`: structured LLM responses saved as JSON
-- `artifacts/runs/<model-combination>/run-N/manifests/benchmark_profile.json`: selected benchmark profile for the run
-- `artifacts/runs/<model-combination>/run-N/reports/comparison_report.json`: machine-readable comparison report
-- `artifacts/runs/<model-combination>/run-N/reports/comparison_report.md`: Markdown comparison table rendered from the comparison JSON payload
-- `artifacts/runs/<model-combination>/run-N/reports/pit-reports/_final_selected/<model-name>/`: copied PIT XML/HTML reports for final evaluated suites
-- `artifacts/runs/<model-combination>/run-N/reports/pit-reports/_initial_snapshot/<model-name>/`: copied PIT XML/HTML reports for initial suite snapshots
-- `artifacts/runs/experiment_timing_summary.json`: timing summary for the latest `run_experiment_matrix.py` invocation
+- `run_outputs/runs/<model-combination>/run-N/baseline_repo/`: generated Java Maven repository
+- `run_outputs/runs/<model-combination>/run-N/generated_tests/_final_selected/<model-name>/`: final generated JUnit 5 test suite retained after repair handling
+- `run_outputs/runs/<model-combination>/run-N/generated_tests/_initial_snapshot/<model-name>/`: preserved initial generated test suite snapshot when repair is attempted
+- `run_outputs/runs/<model-combination>/run-N/manifests/`: structured LLM responses saved as JSON
+- `run_outputs/runs/<model-combination>/run-N/manifests/benchmark_profile.json`: selected benchmark profile for the run
+- `run_outputs/runs/<model-combination>/run-N/reports/comparison_report.json`: machine-readable comparison report
+- `run_outputs/runs/<model-combination>/run-N/reports/comparison_report.md`: Markdown comparison table rendered from the comparison JSON payload
+- `run_outputs/runs/<model-combination>/run-N/reports/pit-reports/_final_selected/<model-name>/`: copied PIT XML/HTML reports for final evaluated test suites
+- `run_outputs/runs/<model-combination>/run-N/reports/pit-reports/_initial_snapshot/<model-name>/`: copied PIT XML/HTML reports for initial evaluated test suites
+- `run_outputs/runs/experiment_timing_summary.json`: timing summary for the latest `run_experiment_matrix.py` invocation
 
 Temporary staged repositories are created under each run directory's `.staging/` folder during evaluation and can be deleted after a run.
 
 ## Evaluation Behavior
 
-The baseline repository is treated as the correct reference implementation for one experiment iteration. If generated tests fail against the baseline, those test methods are considered faulty for this experiment and are disabled in the staged evaluation copy before mutation testing.
+The baseline repository is treated as the correct reference implementation for one experiment iteration. If generated tests fail against the baseline, those test methods are considered faulty for this experiment and are disabled in the staged evaluation copy before final evaluation and mutation testing.
 
-If generated test sources do not compile, the suite cannot be cleaned method-by-method, so PIT is skipped for that suite.
+If generated test sources do not compile, the staged evaluation process cannot disable failing methods one-by-one, so PIT is skipped for that suite.
 
 PIT is used for mutation testing. It mutates the production code and checks whether the generated tests detect those behavioral changes. JaCoCo is used separately for line and branch coverage.
 

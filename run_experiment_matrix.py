@@ -76,8 +76,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output-root",
-        default="artifacts/runs",
-        help="Root directory containing preserved pipeline runs.",
+        default="run_outputs/runs",
+        help="Root directory containing preserved pipeline run outputs.",
     )
     parser.add_argument(
         "--project-name",

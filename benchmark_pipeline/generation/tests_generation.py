@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import shutil
 
+from benchmark_pipeline.cli_output import heading
 from benchmark_pipeline.classifications import classify_repair
 from benchmark_pipeline.fs_utils import (
     reset_directory,
@@ -78,12 +79,8 @@ def generate_tests(
         maven_cmd = ["mvn", "test"]
     log_prefix = f"[tests: {model}]"
 
-    print()
-    print("-" * 72)
-    print(f"{log_prefix} Test suite generation")
-    print("-" * 72)
-    print(f"{log_prefix} Reading baseline repository from {repo_dir.resolve()}")
-    print(f"{log_prefix} Requesting initial generated test suite")
+    heading(log_prefix, "Generation")
+    print(f"{log_prefix} requesting initial generated test suite")
 
     parsed = parse_structured_response(
         model=model,
@@ -103,8 +100,7 @@ def generate_tests(
     result: MavenResult | None = None
 
     for attempt in range(max_repairs + 1):
-        print()
-        print(f"{log_prefix} Candidate attempt {attempt + 1}/{max_repairs + 1}")
+        print(f"{log_prefix} attempt {attempt + 1}/{max_repairs + 1}")
         try:
             validate_generated_tests(parsed)
         except OutputValidationError as exc:
@@ -115,8 +111,8 @@ def generate_tests(
                 ) from exc
 
             print(
-                f"{log_prefix} Validation failed ({exc}). "
-                f"Requesting repair attempt {attempt + 1}/{max_repairs}"
+                f"{log_prefix} validation failed ({exc}); "
+                f"requesting repair {attempt + 1}/{max_repairs}"
             )
             previous = parsed
             repair_attempts += 1
@@ -148,17 +144,15 @@ def generate_tests(
                         "Generated test suite failed semantic validation after repair attempts.\n"
                         f"{repair_exc}"
                     ) from repair_exc
-                print(f"{log_prefix} Repair response was incomplete ({repair_exc}). Requesting another repair.")
+                print(f"{log_prefix} repair response was incomplete ({repair_exc}); requesting another repair")
                 parsed = previous
             continue
 
         if attempt == 0 and initial_output_dir is not None and not initial_snapshot_written:
-            print(f"{log_prefix} Writing initial generated suite snapshot to {initial_output_dir.resolve()}")
             reset_directory(initial_output_dir)
             write_artifacts(initial_output_dir, parsed.files)
             initial_snapshot_written = True
 
-        print(f"{log_prefix} Writing generated tests to {output_dir.resolve()}")
         reset_directory(output_dir)
         write_artifacts(output_dir, parsed.files)
 
@@ -166,15 +160,12 @@ def generate_tests(
         try:
             compile_cmd = compile_check_command(maven_cmd)
             if compile_cmd is not None:
-                print(f"{log_prefix} Checking test compilation with: {' '.join(compile_cmd)}")
                 compile_result = run_maven_tests(staged_dir, compile_cmd)
                 if compile_result.status in {"test_compile_failure", "main_compile_failure"}:
                     result = compile_result
                 else:
-                    print(f"{log_prefix} Verifying test suite with: {' '.join(maven_cmd)}")
                     result = run_maven_tests(staged_dir, maven_cmd)
             else:
-                print(f"{log_prefix} Verifying test suite with: {' '.join(maven_cmd)}")
                 result = run_maven_tests(staged_dir, maven_cmd)
             if first_verification_result is None:
                 first_verification_result = result
@@ -188,7 +179,7 @@ def generate_tests(
                 shutil.rmtree(staged_dir, ignore_errors=True)
 
         if result.passed:
-            print(f"{log_prefix} Verification passed. Test suite is valid.")
+            print(f"{log_prefix} verify passed")
             parsed.repair_attempts = repair_attempts
             parsed.repair_reasons = repair_reasons
             parsed.repair_outcome = classify_repair(
@@ -205,21 +196,21 @@ def generate_tests(
         if attempt == max_repairs:
             if last_good_suite is not None and last_good_result is not None and last_good_suite is not parsed:
                 print(
-                    f"{log_prefix} Verification failed and no repair attempts remain. "
-                    "Keeping the last still-runnable generated suite for evaluation."
+                    f"{log_prefix} verify failed; no repair attempts remain. "
+                    "Keeping the last still-runnable suite for evaluation."
                 )
                 parsed = last_good_suite
                 result = last_good_result
                 reset_directory(output_dir)
                 write_artifacts(output_dir, parsed.files)
                 break
-            print(f"{log_prefix} Verification failed and no repair attempts remain. Keeping the final generated suite for evaluation.")
+            print(f"{log_prefix} verify failed; no repair attempts remain. Keeping the final generated suite for evaluation.")
             break
 
         print(
-            f"{log_prefix} Verification failed "
+            f"{log_prefix} verify failed "
             f"(exit={result.exit_code}, failures={result.failures}, errors={result.errors}). "
-            f"Requesting repair attempt {attempt + 1}/{max_repairs}"
+            f"requesting repair {attempt + 1}/{max_repairs}"
         )
         previous = parsed
         repair_attempts += 1

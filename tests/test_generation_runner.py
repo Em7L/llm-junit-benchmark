@@ -52,7 +52,7 @@ def generated_tests() -> GeneratedTests:
 
 class TestGenerationRunner(unittest.TestCase):
     def setUp(self) -> None:
-        self.root = Path("artifacts/.unit-tests/generation-runner")
+        self.root = Path("run_outputs/.unit-tests/generation-runner")
         if self.root.exists():
             shutil.rmtree(self.root)
         self.root.mkdir(parents=True)

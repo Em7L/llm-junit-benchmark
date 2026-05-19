@@ -22,8 +22,8 @@ def generate_verified_repo(
     verify_cmd: list[str],
     benchmark_profile: BenchmarkProfile | None = None,
 ) -> GeneratedRepo:
-    print()
-    print(f"[baseline] Requesting initial repository generation with model `{model}`")
+    print(f"[baseline] model={model}")
+    print("[baseline] requesting initial repository generation")
     parsed = parse_structured_response(
         model=model,
         schema=GeneratedRepo,
@@ -35,8 +35,7 @@ def generate_verified_repo(
     )
 
     for attempt in range(max_repairs + 1):
-        print()
-        print(f"[baseline] Candidate attempt {attempt + 1}/{max_repairs + 1}")
+        print(f"[baseline] attempt {attempt + 1}/{max_repairs + 1}")
         try:
             validate_generated_repo(parsed)
         except OutputValidationError as exc:
@@ -47,8 +46,8 @@ def generate_verified_repo(
                 ) from exc
 
             print(
-                f"[baseline] Validation failed ({exc}). "
-                f"Requesting repair attempt {attempt + 1}/{max_repairs}"
+                f"[baseline] validation failed ({exc}); "
+                f"requesting repair {attempt + 1}/{max_repairs}"
             )
             parsed = parse_structured_response(
                 model=model,
@@ -66,17 +65,15 @@ def generate_verified_repo(
             )
             continue
 
-        print(f"[baseline] Writing candidate repository to {output_dir}")
         reset_directory(output_dir)
         write_artifacts(output_dir, parsed.files)
-        print(f"[baseline] Verifying repository with: {' '.join(verify_cmd)}")
         result = run_maven_tests(output_dir, verify_cmd)
         if result.passed:
-            print("[baseline] Verification passed")
+            print("[baseline] verify passed")
             return parsed
 
         if attempt == max_repairs:
-            print("[baseline] Verification failed and no repair attempts remain")
+            print("[baseline] verify failed; no repair attempts remain")
             raise RuntimeError(
                 "Generated repository failed verification after repair attempts.\n"
                 f"Exit code: {result.exit_code}\n"
@@ -85,9 +82,9 @@ def generate_verified_repo(
             )
 
         print(
-            f"[baseline] Verification failed "
+            f"[baseline] verify failed "
             f"(exit={result.exit_code}, failures={result.failures}, errors={result.errors}). "
-            f"Requesting repair attempt {attempt + 1}/{max_repairs}"
+            f"requesting repair {attempt + 1}/{max_repairs}"
         )
         parsed = parse_structured_response(
             model=model,

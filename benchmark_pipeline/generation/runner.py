@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from benchmark_pipeline.cli_output import heading
 from benchmark_pipeline.fs_utils import dump_json
 from benchmark_pipeline.generation.profiles import BenchmarkProfile
 from benchmark_pipeline.models import GeneratedRepo, GeneratedTests
@@ -35,11 +36,7 @@ class TestGenerationConfig:
 
 
 def run_baseline_generation(config: BaselineGenerationConfig) -> GeneratedRepo:
-    print()
-    print("-" * 72)
-    print("[baseline] Baseline repository generation")
-    print("-" * 72)
-    print(f"[baseline] Output directory: {config.output_dir.resolve()}")
+    heading("[baseline]", "Repository generation")
     parsed = generate_verified_repo(
         model=config.model,
         project_name=config.project_name,
@@ -48,10 +45,8 @@ def run_baseline_generation(config: BaselineGenerationConfig) -> GeneratedRepo:
         verify_cmd=list(config.verify_cmd),
         benchmark_profile=config.benchmark_profile,
     )
-    print(f"[baseline] Writing manifest to {config.manifest_path.resolve()}")
     dump_json(config.manifest_path, parsed.model_dump())
-    print()
-    print(f"Generated baseline repository at {config.output_dir.resolve()}")
+    print("[baseline] repository ready")
     return parsed
 
 
@@ -63,8 +58,6 @@ def run_test_generation(config: TestGenerationConfig) -> GeneratedTests:
         max_repairs=config.max_repairs,
         initial_output_dir=config.initial_output_dir,
     )
-    print(f"[tests] Writing manifest to {config.manifest_path.resolve()}")
     dump_json(config.manifest_path, parsed.model_dump())
-    print()
-    print(f"Generated test suite at {config.output_dir.resolve()}")
+    print(f"[tests: {config.model}] suite ready")
     return parsed

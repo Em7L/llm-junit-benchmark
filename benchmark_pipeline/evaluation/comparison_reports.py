@@ -51,10 +51,8 @@ def write_comparison_reports(
     canonical_payload = payload
     comparison_json = report_json
     comparison_md = report_md
-    print(f"[pipeline] Writing comparison JSON report to {comparison_json.resolve()}")
     dump_json(comparison_json, canonical_payload)
     comparison_md.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[pipeline] Writing comparison markdown report to {comparison_md.resolve()}")
     comparison_md.write_text(comparison_markdown(canonical_payload), encoding="utf-8")
 
 
@@ -307,14 +305,14 @@ def comparison_markdown(payload: dict[str, object]) -> str:
     if has_initial_snapshots:
         lines.extend(
             render_comparison_table(
-                title="Initial Generated Suite",
+                title="Initial Evaluated Test Suite",
                 rows=rows,
                 snapshot_key="initial_generated_suite",
             )
         )
     lines.extend(
         render_comparison_table(
-            title="Final Selected Suite" if has_repair_attempts else "Evaluated Suite",
+            title="Final Evaluated Test Suite",
             rows=rows,
             snapshot_key="final_generated_suite",
         )

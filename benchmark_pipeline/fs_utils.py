@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Filesystem helpers for writing artifacts, staging repositories, and snapshotting source trees."""
+"""Filesystem helpers for writing generated files, staging repositories, and snapshotting source trees."""
 
 import json
 import shutil

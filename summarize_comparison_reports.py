@@ -18,17 +18,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Aggregate comparison_report.json files across benchmark runs.")
     parser.add_argument(
         "--reports-root",
-        default="artifacts/runs",
-        help="Root directory containing preserved run artifacts.",
+        default="run_outputs/runs",
+        help="Root directory containing preserved run outputs.",
     )
     parser.add_argument(
         "--output-json",
-        default="artifacts/summary/comparison_reports_summary.json",
+        default="run_outputs/summary/comparison_reports_summary.json",
         help="Path for the aggregated JSON summary.",
     )
     parser.add_argument(
         "--output-md",
-        default="artifacts/summary/comparison_reports_summary.md",
+        default="run_outputs/summary/comparison_reports_summary.md",
         help="Path for the aggregated Markdown summary.",
     )
     return parser

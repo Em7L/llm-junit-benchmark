@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from benchmark_pipeline.cli_output import heading
 from benchmark_pipeline.evaluation import EvaluationOutcome, evaluate_repositories
 
 
@@ -48,7 +49,7 @@ def run_evaluation(config: EvaluationRunConfig) -> list[EvaluationSuiteRun]:
     runs: list[EvaluationSuiteRun] = []
 
     for suite_dir in test_suites:
-        suite_name = suite_dir.name if use_suite_named_reports else "evaluation"
+        suite_name = suite_dir.name if use_suite_named_reports else suite_dir.name
         pitest_report_dir = config.pitest_report_dir / suite_name if use_suite_named_reports else config.pitest_report_dir
 
         print_evaluation_start(config, suite_name, suite_dir)
@@ -73,28 +74,31 @@ def run_evaluation(config: EvaluationRunConfig) -> list[EvaluationSuiteRun]:
 
 
 def print_evaluation_start(config: EvaluationRunConfig, suite_name: str, suite_dir: Path) -> None:
-    print()
-    print("-" * 72)
-    print(f"[evaluation] PIT mutation evaluation - {suite_name}")
-    print("-" * 72)
-    print(f"[evaluation] Baseline repository: {config.baseline_repo.resolve()}")
-    print(f"[evaluation] Generated tests: {suite_dir.resolve()}")
-    print(f"[evaluation] Running Maven verification with: {' '.join(config.maven_cmd)}")
+    display_name = describe_suite(suite_dir, suite_name)
+    heading("[evaluation]", display_name)
 
 
 def print_evaluation_summary(suite_name: str, pitest_report_dir: Path, outcome: EvaluationOutcome) -> None:
-    print()
-    print(f"[{suite_name}] Baseline repo passed: {outcome.baseline_result.passed}")
-    print(f"[{suite_name}] Baseline run status: {outcome.baseline_result.status}")
+    prefix = f"[evaluation:{suite_name}]"
+    print(f"{prefix} status={outcome.baseline_result.status} passed={outcome.baseline_result.passed}")
     if outcome.disabled_tests:
-        print(f"[{suite_name}] Disabled baseline-failing generated tests: {len(outcome.disabled_tests)}")
+        print(f"{prefix} disabled tests={len(outcome.disabled_tests)}")
     if outcome.baseline_coverage is not None:
-        print(f"[{suite_name}] Line coverage: {outcome.baseline_coverage.line_rate:.2%}")
-        print(f"[{suite_name}] Branch coverage: {outcome.baseline_coverage.branch_rate:.2%}")
+        print(
+            f"{prefix} line={outcome.baseline_coverage.line_rate:.2%} "
+            f"branch={outcome.baseline_coverage.branch_rate:.2%}"
+        )
     mutation_score = outcome.pitest_result.mutation_score if outcome.pitest_result is not None else None
     if mutation_score is None:
-        print(f"[{suite_name}] Mutation score: N/A")
+        print(f"{prefix} mutation=N/A")
     else:
-        print(f"[{suite_name}] Mutation score: {mutation_score:.2%}")
-    if outcome.pitest_result is not None:
-        print(f"[{suite_name}] PIT reports: {pitest_report_dir.resolve()}")
+        print(f"{prefix} mutation={mutation_score:.2%}")
+
+
+def describe_suite(suite_dir: Path, suite_name: str) -> str:
+    parts = suite_dir.parts
+    if "_final_selected" in parts:
+        return f"Final evaluated test suite ({suite_name})"
+    if "_initial_snapshot" in parts:
+        return f"Initial evaluated test suite ({suite_name})"
+    return f"Evaluated test suite ({suite_name})"

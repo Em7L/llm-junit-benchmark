@@ -29,7 +29,7 @@ def maven_result(status: str, failing_tests: list[str] | None = None) -> MavenRe
 
 class TestEvaluation(unittest.TestCase):
     def setUp(self) -> None:
-        self.root = Path("artifacts/.unit-tests/evaluation")
+        self.root = Path("run_outputs/.unit-tests/evaluation")
         if self.root.exists():
             shutil.rmtree(self.root)
         self.root.mkdir(parents=True)

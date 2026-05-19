@@ -32,7 +32,7 @@ def passed_maven() -> MavenResult:
 
 class TestEvaluationRunner(unittest.TestCase):
     def setUp(self) -> None:
-        self.root = Path("artifacts/.unit-tests/evaluation-runner")
+        self.root = Path("run_outputs/.unit-tests/evaluation-runner")
         if self.root.exists():
             shutil.rmtree(self.root)
         self.root.mkdir(parents=True)

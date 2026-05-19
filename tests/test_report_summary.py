@@ -17,7 +17,7 @@ class ReportSummaryTests(unittest.TestCase):
     def test_summarize_report_payloads_aggregates_model_metrics(self) -> None:
         payloads = [
             {
-                "_report_path": "artifacts/runs/group/run-001/reports/comparison_report.json",
+                "_report_path": "run_outputs/runs/group/run-001/reports/comparison_report.json",
                 "benchmark_profile": {"profile_id": "low", "complexity": "low"},
                 "rows": [
                     {
@@ -81,7 +81,7 @@ class ReportSummaryTests(unittest.TestCase):
                 ],
             },
             {
-                "_report_path": "artifacts/runs/group/run-002/reports/comparison_report.json",
+                "_report_path": "run_outputs/runs/group/run-002/reports/comparison_report.json",
                 "benchmark_profile": {"profile_id": "low", "complexity": "low"},
                 "rows": [
                     {
@@ -153,7 +153,7 @@ class ReportSummaryTests(unittest.TestCase):
         self.assertIn("## Overall Variability", markdown)
         self.assertIn("## Repair Effects (Repaired Runs Only)", markdown)
         self.assertIn("## Profile `low`", markdown)
-        self.assertIn("Accepted suite rate` means the pipeline accepted a generated suite artifact", markdown)
+        self.assertIn("Accepted suite rate` means the pipeline accepted a generated test suite", markdown)
         self.assertIn("Initial test compile rate", markdown)
         self.assertIn("Final test compile rate", markdown)
         self.assertIn("Repair needed", markdown)
@@ -195,8 +195,8 @@ class ReportSummaryTests(unittest.TestCase):
             summary = {
                 "report_count": 2,
                 "report_paths": [
-                    "artifacts/runs/group/run-001/reports/comparison_report.json",
-                    "artifacts/runs/group/run-002/reports/comparison_report.json",
+                    "run_outputs/runs/group/run-001/reports/comparison_report.json",
+                    "run_outputs/runs/group/run-002/reports/comparison_report.json",
                 ],
                 "models": {
                     "deepseek-v4-flash": {

@@ -20,7 +20,7 @@ from benchmark_pipeline.models import FileArtifact
 
 class TestFsUtils(unittest.TestCase):
     def setUp(self) -> None:
-        self.root = Path("artifacts/.unit-tests/fs-utils")
+        self.root = Path("run_outputs/.unit-tests/fs-utils")
         if self.root.exists():
             shutil.rmtree(self.root)
         self.root.mkdir(parents=True)

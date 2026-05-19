@@ -9,6 +9,7 @@ import shutil
 from typing import Sequence
 import concurrent.futures
 
+from benchmark_pipeline.cli_output import heading, kv, relpath
 from benchmark_pipeline.evaluation import EvaluationOutcome
 from benchmark_pipeline.evaluation.comparison_reports import write_comparison_reports
 from benchmark_pipeline.evaluation.runner import EvaluationRunConfig, EvaluationSuiteRun, run_evaluation
@@ -63,18 +64,15 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     if not config.tests_models:
         raise ValueError("At least one test-generation model must be provided.")
 
-    print()
-    print("=" * 72)
-    print("[pipeline] Running full benchmark pipeline")
-    print(f"[pipeline] Repository model: {config.repo_model}")
-    print(
-        "[pipeline] Benchmark profile: "
-        + (config.benchmark_profile.profile_id if config.benchmark_profile is not None else "auto-selected by model")
+    heading("[pipeline]", "Run started")
+    kv("[pipeline]", "run", relpath(config.baseline_repo.parent))
+    kv("[pipeline]", "repo model", config.repo_model)
+    kv(
+        "[pipeline]",
+        "profile",
+        config.benchmark_profile.profile_id if config.benchmark_profile is not None else "auto-selected by model",
     )
-    print(f"[pipeline] Test models: {', '.join(config.tests_models)}")
-    print("=" * 72)
-
-    print(f"[pipeline] Writing benchmark profile manifest to {config.profile_manifest.resolve()}")
+    kv("[pipeline]", "test models", ", ".join(config.tests_models))
     dump_json(
         config.profile_manifest,
         (
@@ -128,7 +126,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
             initial_suite_dir = initial_snapshot_tests_root / suite_name
             if initial_suite_dir.exists():
                 shutil.rmtree(initial_suite_dir, ignore_errors=True)
-            print(f"[pipeline] Test generation failed for `{model}`: {exc}")
+            print(f"[pipeline] test generation failed for `{model}`: {exc}")
             return (model, None, str(exc))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(config.tests_models)) as executor:
@@ -141,7 +139,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
                 test_generation_errors[model] = error
 
     if not generated_tests:
-        print("[pipeline] All test-generation models failed. Skipping PIT evaluation.")
+        print("[pipeline] all test-generation models failed; skipping PIT evaluation")
         write_comparison_reports(
             repo_model=config.repo_model,
             benchmark_profile=config.benchmark_profile,
@@ -156,8 +154,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
             initial_evaluations={},
         )
         print_step_done("test generation")
-        print()
-        print("[pipeline] Full pipeline completed with no evaluable test suites")
+        heading("[pipeline]", "Run finished")
+        print("[pipeline] no evaluable test suites")
         cleanup_published_artifacts(config)
         remove_staging_root(config.baseline_repo)
         return PipelineOutcome(
@@ -187,7 +185,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
         final_suite_dir = final_selected_tests_root / suite_name
         if final_suite_dir.exists() and directories_match(initial_suite_dir, final_suite_dir):
             print(
-                f"[pipeline] Reusing final evaluation for `{model}` because the initial and final suites are identical."
+                f"[pipeline] reusing final evaluation for `{model}`; initial and final generated test suites are identical"
             )
             initial_outcome = evaluations_by_suite.get(suite_name)
             if initial_outcome is not None:
@@ -216,8 +214,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
     )
     print_step_done("PIT evaluation")
 
-    print()
-    print("[pipeline] Full pipeline completed successfully")
+    heading("[pipeline]", "Run finished")
+    kv("[pipeline]", "reports", relpath(config.report_md.parent))
     cleanup_published_artifacts(config)
     remove_staging_root(config.baseline_repo)
     return PipelineOutcome(
@@ -242,14 +240,11 @@ def test_manifest_path(base_path: Path, suite_name: str, is_multi_model: bool) -
 
 
 def print_step(label: str) -> None:
-    print()
-    print("=" * 72)
-    print(f"[pipeline] Starting {label}")
-    print("=" * 72)
+    heading("[pipeline]", f"{label.capitalize()}")
 
 
 def print_step_done(label: str) -> None:
-    print(f"[pipeline] Completed {label}")
+    print(f"[pipeline] {label} complete")
 
 
 def cleanup_published_artifacts(config: PipelineConfig) -> None:

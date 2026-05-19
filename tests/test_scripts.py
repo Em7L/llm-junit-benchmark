@@ -27,7 +27,7 @@ def load_script(filename: str) -> ModuleType:
 
 class TestScripts(unittest.TestCase):
     def setUp(self) -> None:
-        self.root = Path("artifacts/.unit-tests/scripts")
+        self.root = Path("run_outputs/.unit-tests/scripts")
         if self.root.exists():
             shutil.rmtree(self.root)
         self.root.mkdir(parents=True)

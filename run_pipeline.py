@@ -23,7 +23,7 @@ def main() -> None:
         help="Optional benchmark profile used for baseline repository generation.",
     )
     parser.add_argument("--project-name", default="generated-java-app", help="Suggested project name for baseline generation.")
-    parser.add_argument("--output-root", default="artifacts/runs", help="Root directory for preserved pipeline runs.")
+    parser.add_argument("--output-root", default="run_outputs/runs", help="Root directory for preserved pipeline run outputs.")
     parser.add_argument("--run-dir", default=None, help="Explicit run directory. Defaults to the next run-N directory under --output-root.")
     parser.add_argument("--baseline-repo", default=None, help="Baseline repository output directory.")
     parser.add_argument("--tests-dir", default=None, help="Generated tests output directory.")
@@ -46,8 +46,6 @@ def main() -> None:
         if args.run_dir
         else next_run_dir(Path(args.output_root), benchmark_profile.profile_id if benchmark_profile else None, repo_model, tests_models)
     )
-    print(f"[pipeline] Run directory: {run_dir.resolve()}")
-
     config = PipelineConfig(
         repo_model=repo_model,
         tests_models=tuple(tests_models),

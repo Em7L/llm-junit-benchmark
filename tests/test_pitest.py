@@ -11,7 +11,7 @@ from benchmark_pipeline.tools.pitest import calculate_mutation_score, parse_pite
 
 class TestPitestParsing(unittest.TestCase):
     def setUp(self) -> None:
-        self.root = Path("artifacts/.unit-tests/pitest")
+        self.root = Path("run_outputs/.unit-tests/pitest")
         if self.root.exists():
             shutil.rmtree(self.root)
         self.root.mkdir(parents=True)

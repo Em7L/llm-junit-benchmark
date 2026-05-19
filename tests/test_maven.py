@@ -16,7 +16,7 @@ from benchmark_pipeline.tools.maven import (
 
 class TestMavenParsing(unittest.TestCase):
     def setUp(self) -> None:
-        self.root = Path("artifacts/.unit-tests/maven")
+        self.root = Path("run_outputs/.unit-tests/maven")
         if self.root.exists():
             shutil.rmtree(self.root)
         self.root.mkdir(parents=True)

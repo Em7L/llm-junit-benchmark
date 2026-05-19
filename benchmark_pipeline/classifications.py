@@ -6,9 +6,9 @@ from benchmark_pipeline.models import MavenResult
 
 
 GENERATION_CLASSIFICATIONS: dict[str, str] = {
-    "passed": "The test-generation step produced a suite artifact that the pipeline accepted for downstream evaluation.",
-    "failed": "The test-generation step did not produce an accepted suite artifact for downstream evaluation.",
-    "missing": "The pipeline expected a generated suite outcome here, but no accepted suite artifact was available.",
+    "passed": "The test-generation step produced a generated test suite that the pipeline accepted for downstream evaluation.",
+    "failed": "The test-generation step did not produce an accepted generated test suite for downstream evaluation.",
+    "missing": "The pipeline expected a generated test suite outcome here, but no accepted generated test suite was available.",
 }
 
 
@@ -35,10 +35,10 @@ MAVEN_STATUS_CLASSIFICATIONS: dict[str, str] = {
 DISABLING_CLASSIFICATIONS: dict[str, str] = {
     "disabling_not_needed": "No baseline-failing generated tests had to be disabled before mutation evaluation.",
     "disabling_not_applicable": "Disabling baseline-failing tests was not applicable because evaluation did not reach the stage where named failing tests could be disabled.",
-    "disabling_applied_successful": "Disabling baseline-failing generated tests resulted in a passing final baseline test suite.",
-    "disabling_applied_partial": "Disabling baseline-failing generated tests improved the baseline verification outcome, but the final suite still did not pass.",
-    "disabling_applied_no_effect": "Disabling baseline-failing generated tests did not improve the final baseline verification outcome.",
-    "disabling_applied_regressed": "Disabling baseline-failing generated tests made the final baseline verification outcome worse.",
+    "disabling_applied_successful": "Disabling baseline-failing generated tests resulted in a passing final evaluated test suite.",
+    "disabling_applied_partial": "Disabling baseline-failing generated tests improved the verification outcome, but the final evaluated test suite still did not pass.",
+    "disabling_applied_no_effect": "Disabling baseline-failing generated tests did not improve the verification outcome of the final evaluated test suite.",
+    "disabling_applied_regressed": "Disabling baseline-failing generated tests made the verification outcome of the final evaluated test suite worse.",
 }
 
 
