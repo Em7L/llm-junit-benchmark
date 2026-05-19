@@ -18,7 +18,6 @@ REPAIR_CLASSIFICATIONS: dict[str, str] = {
     "repair_partially_improved": "One or more repair attempts improved the verification outcome, but the final generated test suite still did not pass verification.",
     "repair_no_improvement": "One or more repair attempts were applied, but the final generated test suite did not verify any better than the first verifiable suite.",
     "repair_regressed": "One or more repair attempts were applied and the final generated test suite verified worse than the first verifiable suite.",
-    "repair_discarded_incomplete": "A repair response was rejected because it returned an incomplete suite, and the pipeline kept the last complete suite instead.",
 }
 
 
@@ -79,12 +78,9 @@ def classify_repair(
     repair_attempts: int,
     first_verification_result: MavenResult | None,
     final_verification_result: MavenResult | None,
-    final_repair_discarded: bool,
 ) -> str:
     if repair_attempts == 0:
         return "repair_not_needed"
-    if final_repair_discarded:
-        return "repair_discarded_incomplete"
     if final_verification_result is not None and final_verification_result.passed:
         return "repair_successful"
     if first_verification_result is None or final_verification_result is None:

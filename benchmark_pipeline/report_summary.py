@@ -98,7 +98,7 @@ def summarize_model_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     )
 
     final_metric_stats = _metric_stats(rows, row_key=None)
-    initial_metric_stats = _metric_stats(rows, row_key="initial_generated_suite", snapshot_map=INITIAL_METRIC_MAP)
+    initial_metric_stats = _initial_metric_stats(rows)
     final_generated_suite_stats = _metric_stats(rows, row_key="final_generated_suite", snapshot_map=INITIAL_METRIC_MAP)
     repair_delta_metric_stats = _delta_stats(rows)
 
@@ -186,6 +186,23 @@ def _metric_stats(
     }
 
 
+def _initial_metric_stats(rows: list[dict[str, Any]]) -> dict[str, dict[str, float | int | None]]:
+    metric_values: dict[str, list[float]] = {key: [] for key in METRIC_KEYS}
+    for row in rows:
+        source = _initial_metrics_source(row)
+        if source is None:
+            continue
+        for key in METRIC_KEYS:
+            value_key = INITIAL_METRIC_MAP.get(key, key)
+            value = _numeric(source.get(value_key))
+            if value is not None:
+                metric_values[key].append(value)
+    return {
+        key: _summarize_values(values)
+        for key, values in metric_values.items()
+    }
+
+
 def _delta_stats(rows: list[dict[str, Any]]) -> dict[str, dict[str, float | int | None]]:
     delta_values: dict[str, list[float]] = {
         "tests": [],
@@ -260,7 +277,7 @@ def _safe_rate(numerator: int, denominator: int) -> float | None:
 
 
 def _initial_suite_compiled(row: dict[str, Any]) -> bool:
-    snapshot = row.get("initial_generated_suite")
+    snapshot = _initial_metrics_source(row)
     if not isinstance(snapshot, dict):
         return False
     return snapshot.get("before_disabling_status") != "test_compile_failure"
@@ -269,6 +286,18 @@ def _initial_suite_compiled(row: dict[str, Any]) -> bool:
 def _final_suite_compiled(row: dict[str, Any]) -> bool:
     status = row.get("final_suite_before_disabling_status")
     return isinstance(status, str) and status != "test_compile_failure"
+
+
+def _initial_metrics_source(row: dict[str, Any]) -> dict[str, Any] | None:
+    snapshot = row.get("initial_generated_suite")
+    if isinstance(snapshot, dict):
+        return snapshot
+
+    if row.get("repair_attempts") == 0:
+        final_snapshot = row.get("final_generated_suite")
+        if isinstance(final_snapshot, dict):
+            return final_snapshot
+    return None
 
 
 def format_summary_markdown(summary: dict[str, Any]) -> str:
@@ -360,11 +389,14 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
 
 
 def write_summary_files(summary: dict[str, Any], *, output_json: Path | None, output_md: Path | None) -> None:
+    # The summary JSON payload is the canonical aggregated record.
+    # Markdown is rendered purely as a human-readable view of that same payload.
+    canonical_summary = summary
     if output_json is not None:
-        dump_json(output_json, summary)
+        dump_json(output_json, canonical_summary)
     if output_md is not None:
         output_md.parent.mkdir(parents=True, exist_ok=True)
-        output_md.write_text(format_summary_markdown(summary), encoding="utf-8")
+        output_md.write_text(format_summary_markdown(canonical_summary), encoding="utf-8")
 
 
 def _cell(value: Any) -> str:

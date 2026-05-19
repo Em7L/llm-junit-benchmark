@@ -199,6 +199,18 @@ class TestPipeline(unittest.TestCase):
 
         self.assertFalse((config.baseline_repo.parent / ".staging").exists())
 
+    def test_run_pipeline_propagates_evaluation_file_not_found(self) -> None:
+        config = self.config(("model-b",))
+
+        with (
+            patch("benchmark_pipeline.pipeline.run_baseline_generation", return_value=generated_repo()),
+            patch("benchmark_pipeline.pipeline.run_test_generation", return_value=generated_tests()),
+            patch("benchmark_pipeline.pipeline.run_evaluation", side_effect=FileNotFoundError("mvn not found")),
+            redirect_stdout(StringIO()),
+        ):
+            with self.assertRaisesRegex(FileNotFoundError, "mvn not found"):
+                run_pipeline(config)
+
     def test_run_pipeline_removes_target_dirs_from_preserved_artifacts(self) -> None:
         config = self.config(("model-b",))
 
@@ -370,6 +382,60 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(row["initial_generated_suite"]["after_failures"], 0)
         self.assertEqual(row["initial_generated_suite"]["after_skipped"], 1)
 
+    def test_comparison_markdown_reflects_written_json_payload(self) -> None:
+        config = self.config(("model-b",))
+        outcome = evaluation_outcome(
+            pitest_result(["mutant-1", "mutant-2"]),
+            baseline_result=MavenResult(
+                label="repo",
+                exit_code=0,
+                status="passed",
+                status_reason=None,
+                tests=7,
+                failures=0,
+                errors=0,
+                skipped=0,
+                failing_tests=[],
+                stdout="",
+                stderr="",
+            ),
+        )
+
+        with (
+            patch("benchmark_pipeline.pipeline.run_baseline_generation", return_value=generated_repo()),
+            patch("benchmark_pipeline.pipeline.run_test_generation", return_value=generated_tests()),
+            patch(
+                "benchmark_pipeline.pipeline.run_evaluation",
+                return_value=[
+                    EvaluationSuiteRun(
+                        suite_name="model-b",
+                        suite_dir=config.tests_dir / "_final_selected" / "model-b",
+                        pitest_report_dir=config.pitest_report_dir / "_final_selected" / "model-b",
+                        outcome=outcome,
+                    )
+                ],
+            ),
+            redirect_stdout(StringIO()),
+        ):
+            run_pipeline(config)
+
+        payload = json.loads(config.report_json.read_text(encoding="utf-8"))
+        markdown = config.report_md.read_text(encoding="utf-8")
+        row = payload["rows"][0]
+
+        self.assertEqual(row["test_model"], "model-b")
+        self.assertEqual(row["evaluation_status"], "passed")
+        self.assertEqual(row["tests"], 7)
+        self.assertEqual(row["total_mutations"], 2)
+        self.assertEqual(row["mutation_score"], 1.0)
+
+        self.assertIn("- Repository model: `repo-model`", markdown)
+        self.assertIn("- Benchmark profile: `low`", markdown)
+        self.assertIn("## Evaluated Suite", markdown)
+        self.assertIn("| model-b | passed | 7 | 0 | 0 |", markdown)
+        self.assertIn("Comparable PIT suites: `1`", markdown)
+        self.assertIn("Common mutant IDs: `2`", markdown)
+
     def test_run_pipeline_records_before_repair_evaluation_when_repairs_were_attempted(self) -> None:
         config = self.config(("model-b",))
         repaired_tests = GeneratedTests(
@@ -465,7 +531,7 @@ class TestPipeline(unittest.TestCase):
         self.assertIn("## Final Selected Suite", comparison_markdown)
         self.assertIn("| Test model | Generation | Repair | Repair tries |", comparison_markdown)
         self.assertIn(
-            "| Test model | Status | Tests | Test Failures | Test Errors | Skipped tests |",
+            "| Test model | Status | Tests | Test Failures | Test Errors | Line cov. |",
             comparison_markdown,
         )
         self.assertIn("`generation=passed`", comparison_markdown)
@@ -477,7 +543,7 @@ class TestPipeline(unittest.TestCase):
         repaired_tests = GeneratedTests(
             summary="tests",
             files=[],
-            repair_outcome="repair_discarded_incomplete",
+            repair_outcome="repair_no_improvement",
             repair_attempts=1,
             repair_reasons=["verification_failure"],
         )
@@ -594,11 +660,13 @@ class TestPipeline(unittest.TestCase):
 
         comparison = json.loads((config.report_json.parent / "comparison_report.json").read_text(encoding="utf-8"))
         row = comparison["rows"][0]
+        self.assertEqual(row["initial_generated_suite"], row["final_generated_suite"])
         self.assertIsNone(row["final_generated_suite"]["before_tests"])
         self.assertIsNone(row["final_generated_suite"]["before_failures"])
         self.assertIsNone(row["final_generated_suite"]["before_errors"])
         self.assertIsNone(row["final_generated_suite"]["after_tests"])
         comparison_markdown = (config.report_md.parent / "comparison_report.md").read_text(encoding="utf-8")
+        self.assertIn("## Evaluated Suite", comparison_markdown)
         self.assertIn("| model-b | test_compile_failure | N/A | N/A | N/A |", comparison_markdown)
 
     def test_run_pipeline_writes_comparison_report_when_all_test_models_fail(self) -> None:

@@ -230,7 +230,7 @@ class TestGenerationOrchestration(unittest.TestCase):
         ):
             result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=1)
 
-        self.assertIs(result, repaired)
+        self.assertEqual(result.summary, "repaired tests")
         self.assertEqual(result.repair_outcome, "repair_successful")
         self.assertEqual(result.repair_attempts, 1)
         self.assertEqual(result.repair_reasons, ["verification_failure"])
@@ -274,7 +274,7 @@ class TestGenerationOrchestration(unittest.TestCase):
         self.assertEqual(run_maven_tests.call_count, 1)
         self.assertEqual(run_maven_tests.call_args_list[0].args[1], ["mvn", "test-compile"])
 
-    def test_generate_tests_retries_repair_that_drops_existing_test_files(self) -> None:
+    def test_generate_tests_merges_partial_verification_repair_with_existing_suite(self) -> None:
         repo_dir = self.root / "repo"
         repo_dir.mkdir()
         output_dir = self.root / "generated-tests"
@@ -285,40 +285,42 @@ class TestGenerationOrchestration(unittest.TestCase):
                 FileArtifact(path="src/test/java/com/example/ServiceTest.java", content=test_file_content("BrokenServiceTest")),
             ],
         )
-        incomplete_repair = GeneratedTests(
-            summary="incomplete repair",
+        partial_repair = GeneratedTests(
+            summary="partial repair",
             files=[
                 FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("AppTest")),
-            ],
-        )
-        complete_repair = GeneratedTests(
-            summary="complete repair",
-            files=[
-                FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("AppTest")),
-                FileArtifact(path="src/test/java/com/example/ServiceTest.java", content=test_file_content("ServiceTest")),
             ],
         )
 
         with (
             patch(
                 "benchmark_pipeline.generation.tests_generation.parse_structured_response",
-                side_effect=[broken, incomplete_repair, complete_repair],
+                side_effect=[broken, partial_repair],
             ) as parse,
             patch(
                 "benchmark_pipeline.generation.tests_generation.run_maven_tests",
-                side_effect=[failed_maven_result(), failed_maven_result(), passed_maven_result(), passed_maven_result()],
+                side_effect=[failed_maven_result(), passed_maven_result(), passed_maven_result()],
             ) as run_maven_tests,
             redirect_stdout(StringIO()),
         ):
-            result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=2)
+            result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=1)
 
-        self.assertIs(result, complete_repair)
-        self.assertEqual(parse.call_count, 3)
-        self.assertEqual(run_maven_tests.call_count, 4)
+        self.assertEqual(result.summary, "partial repair")
+        self.assertEqual(result.repair_outcome, "repair_successful")
+        self.assertEqual(parse.call_count, 2)
+        self.assertEqual(run_maven_tests.call_count, 3)
         self.assertTrue((output_dir / "src/test/java/com/example/AppTest.java").exists())
         self.assertTrue((output_dir / "src/test/java/com/example/ServiceTest.java").exists())
+        self.assertEqual(
+            (output_dir / "src/test/java/com/example/AppTest.java").read_text(encoding="utf-8"),
+            test_file_content("AppTest"),
+        )
+        self.assertEqual(
+            (output_dir / "src/test/java/com/example/ServiceTest.java").read_text(encoding="utf-8"),
+            test_file_content("BrokenServiceTest"),
+        )
 
-    def test_generate_tests_keeps_last_complete_suite_when_final_repair_drops_files(self) -> None:
+    def test_generate_tests_keeps_merged_suite_when_partial_repair_still_fails(self) -> None:
         repo_dir = self.root / "repo"
         repo_dir.mkdir()
         output_dir = self.root / "generated-tests"
@@ -329,28 +331,28 @@ class TestGenerationOrchestration(unittest.TestCase):
                 FileArtifact(path="src/test/java/com/example/ServiceTest.java", content=test_file_content("BrokenServiceTest")),
             ],
         )
-        incomplete_repair = GeneratedTests(
-            summary="incomplete repair",
+        partial_repair = GeneratedTests(
+            summary="partial repair",
             files=[
                 FileArtifact(path="src/test/java/com/example/AppTest.java", content=test_file_content("AppTest")),
             ],
         )
 
         with (
-            patch("benchmark_pipeline.generation.tests_generation.parse_structured_response", side_effect=[broken, incomplete_repair]) as parse,
+            patch("benchmark_pipeline.generation.tests_generation.parse_structured_response", side_effect=[broken, partial_repair]) as parse,
             patch("benchmark_pipeline.generation.tests_generation.run_maven_tests", return_value=failed_maven_result()) as run_maven_tests,
             redirect_stdout(StringIO()),
         ):
             result = generate_tests(repo_dir=repo_dir, output_dir=output_dir, model="test-model", max_repairs=1)
 
-        self.assertIs(result, broken)
-        self.assertEqual(result.repair_outcome, "repair_discarded_incomplete")
+        self.assertEqual(result.summary, "partial repair")
+        self.assertEqual(result.repair_outcome, "repair_no_improvement")
         self.assertEqual(result.repair_attempts, 1)
         self.assertEqual(parse.call_count, 2)
-        self.assertEqual(run_maven_tests.call_count, 1)
+        self.assertEqual(run_maven_tests.call_count, 2)
         self.assertEqual(
             (output_dir / "src/test/java/com/example/AppTest.java").read_text(encoding="utf-8"),
-            test_file_content("BrokenAppTest"),
+            test_file_content("AppTest"),
         )
         self.assertTrue((output_dir / "src/test/java/com/example/ServiceTest.java").exists())
 

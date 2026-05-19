@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import shutil
 import unittest
@@ -104,23 +105,13 @@ class ReportSummaryTests(unittest.TestCase):
                         "survived": 20,
                         "no_coverage": 10,
                         "mutation_score": 0.75,
-                        "initial_generated_suite": {
-                            "before_disabling_status": "passed",
-                            "after_tests": 20,
-                            "after_failures": 0,
-                            "after_errors": 0,
-                            "after_skipped": 0,
-                            "disabled_tests": 0,
-                            "line_coverage": 0.9,
-                            "branch_coverage": 0.8,
-                            "instruction_coverage": 0.85,
-                            "total_mutations": 120,
-                            "killed": 90,
-                            "survived": 20,
-                            "no_coverage": 10,
-                            "mutation_score": 0.75,
-                        },
                         "final_generated_suite": {
+                            "before_disabling_status": "passed",
+                            "before_tests": 20,
+                            "before_failures": 0,
+                            "before_errors": 0,
+                            "before_skipped": 0,
+                            "after_disabling_status": "passed",
                             "after_tests": 20,
                             "after_failures": 0,
                             "after_errors": 0,
@@ -192,6 +183,94 @@ class ReportSummaryTests(unittest.TestCase):
             self.assertTrue(json_out.exists())
             self.assertTrue(md_out.exists())
             self.assertIn("# Comparison Report Summary", format_summary_markdown(summary))
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_summary_markdown_reflects_written_json_payload(self) -> None:
+        root = Path("tests") / "__tmp_report_summary_consistency"
+        if root.exists():
+            shutil.rmtree(root, ignore_errors=True)
+        root.mkdir(parents=True)
+        try:
+            summary = {
+                "report_count": 2,
+                "report_paths": [
+                    "artifacts/runs/group/run-001/reports/comparison_report.json",
+                    "artifacts/runs/group/run-002/reports/comparison_report.json",
+                ],
+                "models": {
+                    "deepseek-v4-flash": {
+                        "run_count": 2,
+                        "accepted_suite_rate": 1.0,
+                        "initial_test_compile_rate": 0.5,
+                        "final_test_compile_rate": 1.0,
+                        "final_pass_rate": 1.0,
+                        "repair_needed_rate": 0.5,
+                        "repaired_run_count": 1,
+                        "final_means": {
+                            "tests": 12.0,
+                            "line_coverage": 0.81,
+                            "branch_coverage": 0.74,
+                            "mutation_score": 0.77,
+                        },
+                        "repair_delta_means": {
+                            "line_coverage": 0.10,
+                            "branch_coverage": 0.05,
+                            "mutation_score": 0.03,
+                        },
+                        "final_stats": {
+                            "line_coverage": {"n": 2, "stdev": 0.02},
+                            "branch_coverage": {"n": 2, "stdev": 0.01},
+                            "mutation_score": {"n": 2, "stdev": 0.03},
+                        },
+                    }
+                },
+                "profiles": {
+                    "low": {
+                        "models": {
+                            "deepseek-v4-flash": {
+                                "run_count": 2,
+                                "initial_test_compile_rate": 0.5,
+                                "final_test_compile_rate": 1.0,
+                                "final_pass_rate": 1.0,
+                                "repair_needed_rate": 0.5,
+                                "final_means": {
+                                    "tests": 12.0,
+                                    "line_coverage": 0.81,
+                                    "branch_coverage": 0.74,
+                                    "mutation_score": 0.77,
+                                },
+                                "final_stats": {
+                                    "line_coverage": {"n": 2, "stdev": 0.02},
+                                    "branch_coverage": {"n": 2, "stdev": 0.01},
+                                    "mutation_score": {"n": 2, "stdev": 0.03},
+                                },
+                            }
+                        }
+                    }
+                },
+            }
+
+            json_out = root / "summary.json"
+            md_out = root / "summary.md"
+            write_summary_files(summary, output_json=json_out, output_md=md_out)
+
+            persisted_summary = json.loads(json_out.read_text(encoding="utf-8"))
+            markdown = md_out.read_text(encoding="utf-8")
+
+            self.assertEqual(persisted_summary["report_count"], 2)
+            self.assertEqual(persisted_summary["models"]["deepseek-v4-flash"]["run_count"], 2)
+            self.assertEqual(
+                persisted_summary["models"]["deepseek-v4-flash"]["final_means"]["mutation_score"],
+                0.77,
+            )
+
+            self.assertIn("- Reports aggregated: `2`", markdown)
+            self.assertIn("## Overall Results", markdown)
+            self.assertIn("| deepseek-v4-flash | 2 | 100.00% | 50.00% | 100.00% | 100.00% | 50.00% | 12.00 | 81.00% | 74.00% | 77.00% |", markdown)
+            self.assertIn("## Overall Variability", markdown)
+            self.assertIn("## Repair Effects (Repaired Runs Only)", markdown)
+            self.assertIn("## Profile `low`", markdown)
         finally:
             shutil.rmtree(root, ignore_errors=True)
 

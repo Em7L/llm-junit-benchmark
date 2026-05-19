@@ -2,7 +2,7 @@
 
 This project is a Python pipeline for generating small Java/Maven repositories, generating JUnit 5 test suites for them with LLMs, and evaluating the generated tests with Maven, JaCoCo, and PIT mutation testing.
 
-The main CLI entrypoint is `run_pipeline.py`. The implementation lives in the `benchmark_pipeline/` package.
+The main single-run CLI entrypoint is `run_pipeline.py`. The intended multi-run experiment entrypoint is `run_experiment_matrix.py`. The implementation lives in the `benchmark_pipeline/` package.
 
 ## Prerequisites
 
@@ -79,19 +79,65 @@ The full pipeline does the following:
 5. Attempts to repair the baseline repository up to `--max-repairs` times if needed.
 6. Generates one JUnit 5 test suite per test model for the same verified baseline repository.
 7. Runs each generated test suite against the same baseline.
-8. Disables generated test methods that fail against the baseline, because the baseline is treated as the reference implementation for the experiment.
-9. Runs JaCoCo coverage and PIT mutation testing on each cleaned test suite.
-10. Writes comparison JSON/Markdown reports and copied PIT reports under the run directory.
+8. If a generated test suite fails semantic validation, it is repaired as a complete suite.
+9. If a generated test suite compiles or verifies poorly, verification-time repair may return only the changed test files; those updates are merged into the previously generated suite before re-verification.
+10. Disables generated test methods that fail against the baseline, because the baseline is treated as the reference implementation for the experiment.
+11. Runs JaCoCo coverage and PIT mutation testing on each cleaned test suite.
+12. Writes comparison JSON/Markdown reports and copied PIT reports under the run directory.
 
 ## Compare Multiple Test Models
 
-Use `run_pipeline.py --profile-id ... --tests-models ...` for the main experiment. The pipeline generates one baseline repository and then creates one generated test suite per test model under:
+Use `run_pipeline.py --profile-id ... --tests-models ...` when you want one preserved comparison run. The pipeline generates one baseline repository and then creates one generated test suite per test model under:
 
 ```text
 artifacts/runs/<model-combination>/run-N/generated_tests/_final_selected/<model-name>/
 ```
 
 Evaluation then compares all generated suites against the same baseline repository under the same Maven, JaCoCo, and PIT procedure.
+
+## Run The Full Experiment Matrix
+
+Use `run_experiment_matrix.py` for the intended thesis experiment workflow across profiles, baseline-generation models, and preserved repetitions.
+
+Run the default matrix:
+
+```powershell
+python run_experiment_matrix.py
+```
+
+Default matrix settings:
+
+- profiles: `low`, `high`
+- repository-generation models: `gpt-5.4-mini`, `deepseek-v4-flash`
+- test-generation models for every run: `gpt-5.4-mini`, `deepseek-v4-flash`, `gemini-3-flash-preview`, `gpt-4o-mini`
+- target repetitions per condition: `8`
+
+This produces the 4 default conditions:
+
+- `low` + `gpt-5.4-mini`
+- `high` + `gpt-5.4-mini`
+- `low` + `deepseek-v4-flash`
+- `high` + `deepseek-v4-flash`
+
+Useful variants:
+
+```powershell
+python run_experiment_matrix.py --dry-run
+python run_experiment_matrix.py --profile-ids low --repo-models gpt-5.4-mini
+python run_experiment_matrix.py --repetitions 8 --continue-on-error
+```
+
+Matrix runner behavior:
+
+- Existing preserved `run-*` directories are used to infer progress for each condition.
+- The runner only executes the missing runs needed to reach the target repetition count.
+- `--dry-run` prints the plan without executing pipeline runs.
+- A timing summary is written to `artifacts/runs/experiment_timing_summary.json` by default.
+- If a provider quota / credit / rate-limit failure is detected during a run, that current `run-*` directory is deleted and the script stops immediately.
+
+Operational note:
+
+- If you manually interrupt the matrix runner during a run, delete that latest partial `run-*` directory before restarting. The runner currently infers progress from existing run directories.
 
 To aggregate many preserved `comparison_report.json` files into one study-level summary, run:
 
@@ -114,9 +160,10 @@ The main generated files and folders are:
 - `artifacts/runs/<model-combination>/run-N/manifests/`: structured LLM responses saved as JSON
 - `artifacts/runs/<model-combination>/run-N/manifests/benchmark_profile.json`: selected benchmark profile for the run
 - `artifacts/runs/<model-combination>/run-N/reports/comparison_report.json`: machine-readable comparison report
-- `artifacts/runs/<model-combination>/run-N/reports/comparison_report.md`: Markdown comparison table across test models
+- `artifacts/runs/<model-combination>/run-N/reports/comparison_report.md`: Markdown comparison table rendered from the comparison JSON payload
 - `artifacts/runs/<model-combination>/run-N/reports/pit-reports/_final_selected/<model-name>/`: copied PIT XML/HTML reports for final evaluated suites
 - `artifacts/runs/<model-combination>/run-N/reports/pit-reports/_initial_snapshot/<model-name>/`: copied PIT XML/HTML reports for initial suite snapshots
+- `artifacts/runs/experiment_timing_summary.json`: timing summary for the latest `run_experiment_matrix.py` invocation
 
 Temporary staged repositories are created under each run directory's `.staging/` folder during evaluation and can be deleted after a run.
 
@@ -127,6 +174,8 @@ The baseline repository is treated as the correct reference implementation for o
 If generated test sources do not compile, the suite cannot be cleaned method-by-method, so PIT is skipped for that suite.
 
 PIT is used for mutation testing. It mutates the production code and checks whether the generated tests detect those behavioral changes. JaCoCo is used separately for line and branch coverage.
+
+Comparison and summary reports are written as both JSON and Markdown. The JSON files are the canonical records; the Markdown files are human-readable views rendered from those same payloads.
 
 ## Useful Commands
 
@@ -145,7 +194,7 @@ python -m ruff check .
 Compile-check the Python files:
 
 ```powershell
-python -m compileall run_pipeline.py benchmark_pipeline tests
+python -m compileall run_pipeline.py run_experiment_matrix.py summarize_comparison_reports.py benchmark_pipeline tests
 ```
 
 ## Notes

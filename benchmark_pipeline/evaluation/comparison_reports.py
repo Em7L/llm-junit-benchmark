@@ -46,13 +46,16 @@ def write_comparison_reports(
         evaluations=evaluations,
         initial_evaluations=initial_evaluations,
     )
+    # The comparison JSON payload is the canonical experiment record.
+    # Markdown is rendered purely as a human-readable view of that same payload.
+    canonical_payload = payload
     comparison_json = report_json
     comparison_md = report_md
     print(f"[pipeline] Writing comparison JSON report to {comparison_json.resolve()}")
-    dump_json(comparison_json, payload)
+    dump_json(comparison_json, canonical_payload)
     comparison_md.parent.mkdir(parents=True, exist_ok=True)
     print(f"[pipeline] Writing comparison markdown report to {comparison_md.resolve()}")
-    comparison_md.write_text(comparison_markdown(payload), encoding="utf-8")
+    comparison_md.write_text(comparison_markdown(canonical_payload), encoding="utf-8")
 
 
 def comparison_payload(
@@ -137,7 +140,11 @@ def comparison_payload(
                 "survived": pitest.status_counts.get("SURVIVED", 0) if pitest is not None else None,
                 "no_coverage": pitest.status_counts.get("NO_COVERAGE", 0) if pitest is not None else None,
                 "mutation_score": pitest.mutation_score if pitest is not None else None,
-                "initial_generated_suite": before_snapshot or after_snapshot,
+                "initial_generated_suite": (
+                    before_snapshot
+                    if before_snapshot is not None
+                    else after_snapshot if generated is not None and generated.repair_attempts == 0 else None
+                ),
                 "final_generated_suite": after_snapshot,
             }
         )
@@ -277,6 +284,13 @@ def suite_label(run: EvaluationSuiteRun) -> str:
 def comparison_markdown(payload: dict[str, object]) -> str:
     rows = payload["rows"]
     assert isinstance(rows, list)
+    has_initial_snapshots = any(
+        isinstance(row, dict)
+        and isinstance(row.get("initial_generated_suite"), dict)
+        and isinstance(row.get("repair_attempts"), int)
+        and row.get("repair_attempts", 0) > 0
+        for row in rows
+    )
     has_repair_attempts = any(
         isinstance(row, dict) and isinstance(row.get("repair_attempts"), int) and row.get("repair_attempts", 0) > 0
         for row in rows
@@ -290,21 +304,21 @@ def comparison_markdown(payload: dict[str, object]) -> str:
         f"- Baseline repository: `{payload['baseline_repo']}`",
     ]
     lines.extend(render_summary_table(rows))
-    lines.extend(
-        render_comparison_table(
-            title="Initial Generated Suite",
-            rows=rows,
-            snapshot_key="initial_generated_suite",
-        )
-    )
-    if has_repair_attempts:
+    if has_initial_snapshots:
         lines.extend(
             render_comparison_table(
-                title="Final Selected Suite",
+                title="Initial Generated Suite",
                 rows=rows,
-                snapshot_key="final_generated_suite",
+                snapshot_key="initial_generated_suite",
             )
         )
+    lines.extend(
+        render_comparison_table(
+            title="Final Selected Suite" if has_repair_attempts else "Evaluated Suite",
+            rows=rows,
+            snapshot_key="final_generated_suite",
+        )
+    )
 
     failed_rows = [row for row in rows if isinstance(row, dict) and row.get("error")]
     if failed_rows:
@@ -395,8 +409,8 @@ def render_comparison_table(
         "",
         f"## {title}",
         "",
-        "| Test model | Status | Tests | Test Failures | Test Errors | Skipped tests | Line cov. | Branch cov. | Mutations | Killed | Survived | No coverage | Mutation score |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Test model | Status | Tests | Test Failures | Test Errors | Line cov. | Branch cov. | Mutations | Killed | Survived | No coverage | Mutation score |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         assert isinstance(row, dict)
@@ -411,7 +425,6 @@ def render_comparison_table(
                     markdown_cell(snapshot_dict.get("before_tests")),
                     markdown_cell(snapshot_dict.get("before_failures")),
                     markdown_cell(snapshot_dict.get("before_errors")),
-                    markdown_cell(snapshot_dict.get("after_skipped")),
                     percent_cell(snapshot_dict.get("line_coverage")),
                     percent_cell(snapshot_dict.get("branch_coverage")),
                     markdown_cell(snapshot_dict.get("total_mutations")),

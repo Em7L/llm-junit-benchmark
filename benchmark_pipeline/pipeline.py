@@ -55,8 +55,8 @@ class PipelineOutcome:
     evaluations: list[EvaluationSuiteRun]
 
     @property
-    def evaluation(self) -> EvaluationOutcome:
-        return self.evaluations[0].outcome
+    def evaluation(self) -> EvaluationOutcome | None:
+        return self.evaluations[0].outcome if self.evaluations else None
 
 
 def run_pipeline(config: PipelineConfig) -> PipelineOutcome:
@@ -266,17 +266,14 @@ def run_evaluation_for_suites(
 ) -> list[EvaluationSuiteRun]:
     if not tests_dir.exists():
         return []
-    try:
-        return run_evaluation(
-            EvaluationRunConfig(
-                baseline_repo=baseline_repo,
-                tests_dir=tests_dir,
-                pitest_report_dir=pitest_report_dir,
-                maven_cmd=maven_cmd,
-            )
+    return run_evaluation(
+        EvaluationRunConfig(
+            baseline_repo=baseline_repo,
+            tests_dir=tests_dir,
+            pitest_report_dir=pitest_report_dir,
+            maven_cmd=maven_cmd,
         )
-    except FileNotFoundError:
-        return []
+    )
 
 
 def evaluation_map_by_suite_name(runs: list[EvaluationSuiteRun]) -> dict[str, EvaluationOutcome]:

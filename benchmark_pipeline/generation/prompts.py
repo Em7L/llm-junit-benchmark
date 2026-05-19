@@ -169,9 +169,18 @@ def build_test_prompt(repo_root: Path) -> str:
     ).strip()
 
 
-def build_test_repair_prompt(repo_root: Path, build_output: str) -> str:
+def build_test_repair_prompt(repo_root: Path, build_output: str, *, return_full_suite: bool = True) -> str:
     snapshot = repo_snapshot(repo_root, include_extensions={".java", ".xml", ".md"})
     tree = tree_listing(repo_root)
+    repair_return_requirement = (
+        "- Return the complete repaired test suite, including unchanged test files.\n"
+        "- Do not return only the modified file.\n"
+        "- Preserve the full suite and repair weak tests in place rather than dropping files."
+        if return_full_suite
+        else "- Return only the Java test files that need to be added or updated.\n"
+        "- Do not repeat unchanged test files.\n"
+        "- Keep every unchanged test file from the existing suite exactly as-is; only return files that must change."
+    )
     return textwrap.dedent(
         f"""
         The previously generated JUnit 5 test suite failed to compile or pass `mvn test`.
@@ -192,8 +201,7 @@ def build_test_repair_prompt(repo_root: Path, build_output: str) -> str:
         Requirements:
         - Return ONLY Java test files under `src/test/java` to add/update in the repo.
         - DO NOT return production files (`src/main/java/...`), `pom.xml`, or `README.md` in the response.
-        - Return the complete repaired test suite, including unchanged test files.
-        - Do not return only the modified file.
+        {repair_return_requirement}
         - Fix all compilation errors, import issues, and test failures.
         - Modify only the failing test files identified by the compiler or test output.
         - Do not change unrelated test files unless a closely related shared helper, import, or setup dependency requires it.
@@ -204,6 +212,5 @@ def build_test_repair_prompt(repo_root: Path, build_output: str) -> str:
         - Replace placeholder tests with real behavior checks against the production API.
         - Do not use tautological assertions such as `assertTrue(true)`, `assertFalse(false)`, or assertions that only restate literals.
         - Every test method must instantiate production objects, call production methods, or verify exceptions from the production API.
-        - Preserve the full suite and repair weak tests in place rather than dropping files.
         """
     ).strip()

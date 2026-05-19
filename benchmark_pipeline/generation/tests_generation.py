@@ -37,6 +37,20 @@ def validate_repair_did_not_drop_suite(previous: GeneratedTests, repaired: Gener
         )
 
 
+def merge_repaired_tests(previous: GeneratedTests, updates: GeneratedTests) -> GeneratedTests:
+    merged_files = {artifact.path: artifact for artifact in previous.files}
+    for artifact in updates.files:
+        merged_files[artifact.path] = artifact
+    return GeneratedTests(
+        summary=updates.summary or previous.summary,
+        files=list(merged_files.values()),
+        assumptions=updates.assumptions or previous.assumptions,
+        repair_attempts=previous.repair_attempts,
+        repair_outcome=previous.repair_outcome,
+        repair_reasons=list(previous.repair_reasons),
+    )
+
+
 def compile_check_command(maven_cmd: list[str]) -> list[str] | None:
     if not maven_cmd:
         return None
@@ -82,7 +96,6 @@ def generate_tests(
     )
     repair_attempts = 0
     repair_reasons: list[str] = []
-    final_repair_discarded = False
     first_verification_result: MavenResult | None = None
     last_good_suite: GeneratedTests | None = None
     last_good_result: MavenResult | None = None
@@ -113,6 +126,7 @@ def generate_tests(
                 semantic_repair_context = build_test_repair_prompt(
                     repo_root=semantic_repair_root,
                     build_output=str(exc),
+                    return_full_suite=True,
                 )
             finally:
                 if semantic_repair_root.exists():
@@ -167,6 +181,7 @@ def generate_tests(
             repair_context = build_test_repair_prompt(
                 repo_root=staged_dir,
                 build_output=f"{result.stdout}\n{result.stderr}".strip(),
+                return_full_suite=False,
             )
         finally:
             if staged_dir.exists():
@@ -180,7 +195,6 @@ def generate_tests(
                 repair_attempts=repair_attempts,
                 first_verification_result=first_verification_result,
                 final_verification_result=result,
-                final_repair_discarded=final_repair_discarded,
             )
             return parsed
 
@@ -210,29 +224,16 @@ def generate_tests(
         previous = parsed
         repair_attempts += 1
         repair_reasons.append("verification_failure")
-        parsed = parse_structured_response(
+        repaired_updates = parse_structured_response(
             model=model,
             schema=GeneratedTests,
             instructions=(
                 "Repair the JUnit 5 test suite so it compiles and passes verification. "
-                "Return the complete repaired test suite, including unchanged test files. "
                 "Return only structured data that matches the schema."
             ),
             user_input=repair_context,
         )
-        try:
-            validate_repair_did_not_drop_suite(previous, parsed)
-        except OutputValidationError as exc:
-            if attempt == max_repairs - 1:
-                print(
-                    f"{log_prefix} Repair response was incomplete and no repair attempts remain. "
-                    "Keeping the last complete generated suite for evaluation."
-                )
-                parsed = previous
-                final_repair_discarded = True
-                break
-            print(f"{log_prefix} Repair response was incomplete ({exc}). Requesting another repair.")
-            parsed = previous
+        parsed = merge_repaired_tests(previous, repaired_updates)
 
     parsed.repair_attempts = repair_attempts
     parsed.repair_reasons = repair_reasons
@@ -240,6 +241,5 @@ def generate_tests(
         repair_attempts=repair_attempts,
         first_verification_result=first_verification_result,
         final_verification_result=result,
-        final_repair_discarded=final_repair_discarded,
     )
     return parsed
