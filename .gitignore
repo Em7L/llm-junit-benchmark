@@ -1,5 +1,5 @@
 .env
 .venv/
 __pycache__/
-artifacts/
+run_outputs/
 0_notes/

@@ -18,6 +18,7 @@ class ReportSummaryTests(unittest.TestCase):
         payloads = [
             {
                 "_report_path": "run_outputs/runs/group/run-001/reports/comparison_report.json",
+                "repo_model": "gpt-5.4-mini",
                 "benchmark_profile": {"profile_id": "low", "complexity": "low"},
                 "rows": [
                     {
@@ -82,6 +83,7 @@ class ReportSummaryTests(unittest.TestCase):
             },
             {
                 "_report_path": "run_outputs/runs/group/run-002/reports/comparison_report.json",
+                "repo_model": "deepseek-v4-flash",
                 "benchmark_profile": {"profile_id": "low", "complexity": "low"},
                 "rows": [
                     {
@@ -148,17 +150,24 @@ class ReportSummaryTests(unittest.TestCase):
         self.assertEqual(deepseek["repair_delta_stats"]["mutation_score"]["n"], 1)
         self.assertEqual(failed["generation_status_counts"]["failed"], 1)
         self.assertIsNone(failed["final_pass_rate"])
+        self.assertIn("gpt-5.4-mini", summary["repo_models"])
+        self.assertIn("deepseek-v4-flash", summary["repo_models"])
+        self.assertEqual(summary["repo_models"]["gpt-5.4-mini"]["overall"]["run_count"], 2)
         markdown = format_summary_markdown(summary)
         self.assertIn("## Overall Results", markdown)
         self.assertIn("## Overall Variability", markdown)
         self.assertIn("## Repair Effects (Repaired Runs Only)", markdown)
         self.assertIn("## Profile `low`", markdown)
+        self.assertIn("## Repository Model Comparison", markdown)
+        self.assertIn("## Repository Model `gpt-5.4-mini`", markdown)
+        self.assertIn("## Repository Model `deepseek-v4-flash`", markdown)
         self.assertIn("Accepted suite rate` means the pipeline accepted a generated test suite", markdown)
         self.assertIn("Initial test compile rate", markdown)
         self.assertIn("Final test compile rate", markdown)
         self.assertIn("Repair needed", markdown)
         self.assertIn("Avg tests", markdown)
         self.assertIn("## Profile `low` Variability", markdown)
+        self.assertIn("## Repository Model `gpt-5.4-mini` Variability", markdown)
         self.assertNotIn("Overall Outcome Counts", markdown)
         self.assertNotIn("Overall Final Generated Suite Averages", markdown)
 
@@ -249,6 +258,42 @@ class ReportSummaryTests(unittest.TestCase):
                         }
                     }
                 },
+                "repo_models": {
+                    "gpt-5.4-mini": {
+                        "overall": {
+                            "run_count": 2,
+                            "initial_test_compile_rate": 0.5,
+                            "final_test_compile_rate": 1.0,
+                            "final_pass_rate": 1.0,
+                            "final_means": {
+                                "tests": 12.0,
+                                "line_coverage": 0.81,
+                                "branch_coverage": 0.74,
+                                "mutation_score": 0.77,
+                            },
+                        },
+                        "models": {
+                            "deepseek-v4-flash": {
+                                "run_count": 2,
+                                "initial_test_compile_rate": 0.5,
+                                "final_test_compile_rate": 1.0,
+                                "final_pass_rate": 1.0,
+                                "repair_needed_rate": 0.5,
+                                "final_means": {
+                                    "tests": 12.0,
+                                    "line_coverage": 0.81,
+                                    "branch_coverage": 0.74,
+                                    "mutation_score": 0.77,
+                                },
+                                "final_stats": {
+                                    "line_coverage": {"n": 2, "stdev": 0.02},
+                                    "branch_coverage": {"n": 2, "stdev": 0.01},
+                                    "mutation_score": {"n": 2, "stdev": 0.03},
+                                },
+                            }
+                        },
+                    }
+                },
             }
 
             json_out = root / "summary.json"
@@ -271,6 +316,9 @@ class ReportSummaryTests(unittest.TestCase):
             self.assertIn("## Overall Variability", markdown)
             self.assertIn("## Repair Effects (Repaired Runs Only)", markdown)
             self.assertIn("## Profile `low`", markdown)
+            self.assertIn("## Repository Model Comparison", markdown)
+            self.assertIn("| gpt-5.4-mini | 2 | 50.00% | 100.00% | 100.00% | 12.00 | 81.00% | 74.00% | 77.00% |", markdown)
+            self.assertIn("## Repository Model `gpt-5.4-mini`", markdown)
         finally:
             shutil.rmtree(root, ignore_errors=True)
 

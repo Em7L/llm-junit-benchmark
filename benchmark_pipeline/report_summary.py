@@ -44,10 +44,13 @@ def load_comparison_reports(reports_root: Path) -> list[dict[str, Any]]:
 def summarize_report_payloads(payloads: list[dict[str, Any]]) -> dict[str, Any]:
     model_rows: dict[str, list[dict[str, Any]]] = {}
     profile_model_rows: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    repo_model_rows: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    repo_model_all_rows: dict[str, list[dict[str, Any]]] = {}
 
     for payload in payloads:
         profile = payload.get("benchmark_profile") or {}
         profile_id = str(profile.get("profile_id") or "auto-selected")
+        repo_model = str(payload.get("repo_model") or "unknown")
         rows = payload.get("rows")
         if not isinstance(rows, list):
             continue
@@ -57,6 +60,8 @@ def summarize_report_payloads(payloads: list[dict[str, Any]]) -> dict[str, Any]:
             model = str(row.get("test_model") or "unknown")
             model_rows.setdefault(model, []).append(row)
             profile_model_rows.setdefault(profile_id, {}).setdefault(model, []).append(row)
+            repo_model_rows.setdefault(repo_model, {}).setdefault(model, []).append(row)
+            repo_model_all_rows.setdefault(repo_model, []).append(row)
 
     return {
         "report_count": len(payloads),
@@ -73,6 +78,16 @@ def summarize_report_payloads(payloads: list[dict[str, Any]]) -> dict[str, Any]:
                 }
             }
             for profile_id, models in sorted(profile_model_rows.items())
+        },
+        "repo_models": {
+            repo_model: {
+                "overall": summarize_model_rows(repo_model_all_rows.get(repo_model, [])),
+                "models": {
+                    model: summarize_model_rows(rows)
+                    for model, rows in sorted(models.items())
+                },
+            }
+            for repo_model, models in sorted(repo_model_rows.items())
         },
     }
 
@@ -385,6 +400,70 @@ def format_summary_markdown(summary: dict[str, Any]) -> str:
                         + " |"
                     )
                 lines.extend(_render_compact_variability_table(f"Profile `{profile_id}` Variability", models))
+
+    repo_models = summary.get("repo_models", {})
+    if isinstance(repo_models, dict) and repo_models:
+        lines.extend(
+            [
+                "",
+                "## Repository Model Comparison",
+                "",
+                "| Repository model | Rows | Initial test compile rate | Final test compile rate | Final pass rate | Avg tests | Avg line cov. | Avg branch cov. | Avg mutation score |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for repo_model, repo_summary in sorted(repo_models.items()):
+            overall = repo_summary.get("overall", {})
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        repo_model,
+                        _cell(overall.get("run_count")),
+                        _percent(overall.get("initial_test_compile_rate")),
+                        _percent(overall.get("final_test_compile_rate")),
+                        _percent(overall.get("final_pass_rate")),
+                        _number(overall.get("final_means", {}).get("tests"), 2),
+                        _percent(overall.get("final_means", {}).get("line_coverage")),
+                        _percent(overall.get("final_means", {}).get("branch_coverage")),
+                        _percent(overall.get("final_means", {}).get("mutation_score")),
+                    ]
+                )
+                + " |"
+            )
+
+        for repo_model, repo_summary in sorted(repo_models.items()):
+            lines.extend(
+                [
+                    "",
+                    f"## Repository Model `{repo_model}`",
+                    "",
+                    "| Test model | Runs | Initial test compile rate | Final test compile rate | Final pass rate | Repair needed | Avg tests | Avg line cov. | Avg branch cov. | Avg mutation score |",
+                    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+                ]
+            )
+            models = repo_summary.get("models", {})
+            if isinstance(models, dict):
+                for model, model_summary in sorted(models.items()):
+                    lines.append(
+                        "| "
+                        + " | ".join(
+                            [
+                                model,
+                                _cell(model_summary.get("run_count")),
+                                _percent(model_summary.get("initial_test_compile_rate")),
+                                _percent(model_summary.get("final_test_compile_rate")),
+                                _percent(model_summary.get("final_pass_rate")),
+                                _percent(model_summary.get("repair_needed_rate")),
+                                _number(model_summary.get("final_means", {}).get("tests"), 2),
+                                _percent(model_summary.get("final_means", {}).get("line_coverage")),
+                                _percent(model_summary.get("final_means", {}).get("branch_coverage")),
+                                _percent(model_summary.get("final_means", {}).get("mutation_score")),
+                            ]
+                        )
+                        + " |"
+                    )
+                lines.extend(_render_compact_variability_table(f"Repository Model `{repo_model}` Variability", models))
     return "\n".join(lines)
 
 
