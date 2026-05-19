@@ -276,6 +276,39 @@ class TestScripts(unittest.TestCase):
         self.assertTrue(summary["dry_run"])
         self.assertEqual(summary["executed_runs"], 0)
 
+    def test_run_experiment_matrix_dry_run_plans_sequential_run_dirs(self) -> None:
+        module = load_script("run_experiment_matrix.py")
+        run_pipeline = Mock()
+        output_root = self.root / "runs"
+
+        argv = [
+            "run_experiment_matrix.py",
+            "--profile-ids",
+            "low",
+            "--repo-models",
+            "gpt-5.4-mini",
+            "--tests-models",
+            "gpt-5.4-mini",
+            "--repetitions",
+            "3",
+            "--output-root",
+            str(output_root),
+            "--dry-run",
+        ]
+
+        with (
+            patch.object(module, "run_pipeline", run_pipeline),
+            patch.object(sys, "argv", argv),
+            redirect_stdout(StringIO()) as stdout,
+        ):
+            module.main()
+
+        run_pipeline.assert_not_called()
+        output = stdout.getvalue()
+        self.assertIn("run-001", output)
+        self.assertIn("run-002", output)
+        self.assertIn("run-003", output)
+
     def test_run_experiment_matrix_deletes_invalid_run_and_stops_on_quota_error(self) -> None:
         module = load_script("run_experiment_matrix.py")
         output_root = self.root / "runs"

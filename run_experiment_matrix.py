@@ -151,8 +151,14 @@ def main() -> None:
             continue
 
         planned_runs += remaining_runs
-        for _ in range(remaining_runs):
-            run_dir = next_run_dir(output_root, condition.profile_id, condition.repo_model, list(tests_models))
+        planned_run_dirs = plan_run_dirs(
+            output_root=output_root,
+            condition=condition,
+            tests_models=tests_models,
+            start_index=existing_runs + 1,
+            count=remaining_runs,
+        )
+        for run_dir in planned_run_dirs:
             print(f"[experiment] Planned run: {run_dir.resolve()}")
             if args.dry_run:
                 continue
@@ -288,6 +294,21 @@ def build_pipeline_config(
         maven_cmd=list(maven_cmd),
         max_repairs=max_repairs,
     )
+
+
+def plan_run_dirs(
+    *,
+    output_root: Path,
+    condition: ExperimentCondition,
+    tests_models: Sequence[str],
+    start_index: int,
+    count: int,
+) -> list[Path]:
+    group_dir = output_root / run_group_name(condition.profile_id, condition.repo_model, list(tests_models))
+    return [
+        group_dir / f"run-{index:03d}"
+        for index in range(start_index, start_index + count)
+    ]
 
 
 def count_existing_runs(output_root: Path, condition: ExperimentCondition, tests_models: Sequence[str]) -> int:
