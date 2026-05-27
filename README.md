@@ -202,4 +202,3 @@ python -m compileall run_pipeline.py run_experiment_matrix.py summarize_comparis
 - The pipeline is intended for controlled empirical experiments, not production Java project generation.
 - The generated baseline code is assumed correct only within one experiment iteration.
 - Results should be interpreted for the selected models, prompts, generated repositories, and evaluation setup.
-- Do not commit `.env`, API keys, or confidential thesis drafts.

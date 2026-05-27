@@ -10,6 +10,7 @@ from benchmark_pipeline.report_summary import (
     format_summary_markdown,
     load_comparison_reports,
     summarize_report_payloads,
+    write_appendix_files,
     write_summary_files,
 )
 
@@ -31,6 +32,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="run_outputs/summary/comparison_reports_summary.md",
         help="Path for the aggregated Markdown summary.",
     )
+    parser.add_argument(
+        "--appendix-csv",
+        default="run_outputs/summary/comparison_reports_appendix.csv",
+        help="Path for the per-run appendix CSV export.",
+    )
+    parser.add_argument(
+        "--appendix-md",
+        default="run_outputs/summary/comparison_reports_appendix.md",
+        help="Path for the per-run appendix Markdown export.",
+    )
     return parser
 
 
@@ -48,6 +59,11 @@ def main() -> None:
         output_json=Path(args.output_json) if args.output_json else None,
         output_md=Path(args.output_md) if args.output_md else None,
     )
+    write_appendix_files(
+        summary,
+        output_csv=Path(args.appendix_csv) if args.appendix_csv else None,
+        output_md=Path(args.appendix_md) if args.appendix_md else None,
+    )
 
     print()
     print("=" * 72)
@@ -58,6 +74,8 @@ def main() -> None:
         print(f"[summary] JSON summary: {Path(args.output_json).resolve()}")
     if args.output_md:
         print(f"[summary] Markdown summary: {Path(args.output_md).resolve()}")
+    if args.appendix_csv:
+        print(f"[summary] Appendix CSV: {Path(args.appendix_csv).resolve()}")
     print("=" * 72)
     print()
     print(format_summary_markdown(summary))

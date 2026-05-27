@@ -7,8 +7,10 @@ import unittest
 
 from benchmark_pipeline.report_summary import (
     find_comparison_reports,
+    format_appendix_markdown,
     format_summary_markdown,
     summarize_report_payloads,
+    write_appendix_files,
     write_summary_files,
 )
 
@@ -145,29 +147,28 @@ class ReportSummaryTests(unittest.TestCase):
         self.assertAlmostEqual(deepseek["mean_repair_attempts"], 0.5)
         self.assertAlmostEqual(deepseek["final_means"]["tests"], 15.0)
         self.assertAlmostEqual(deepseek["final_means"]["line_coverage"], 0.85)
+        self.assertAlmostEqual(deepseek["final_means"]["branch_coverage"], 0.75)
         self.assertAlmostEqual(deepseek["final_means"]["mutation_score"], 0.775)
         self.assertAlmostEqual(deepseek["repair_delta_means"]["mutation_score"], 0.05)
         self.assertEqual(deepseek["repair_delta_stats"]["mutation_score"]["n"], 1)
         self.assertEqual(failed["generation_status_counts"]["failed"], 1)
-        self.assertIsNone(failed["final_pass_rate"])
+        self.assertEqual(failed["final_pass_rate"], 0.0)
         self.assertIn("gpt-5.4-mini", summary["repo_models"])
         self.assertIn("deepseek-v4-flash", summary["repo_models"])
         self.assertEqual(summary["repo_models"]["gpt-5.4-mini"]["overall"]["run_count"], 2)
         markdown = format_summary_markdown(summary)
-        self.assertIn("## Overall Results", markdown)
-        self.assertIn("## Overall Variability", markdown)
+        self.assertIn("## RQ1. Usability", markdown)
+        self.assertIn("## RQ2/RQ3. Coverage and Mutation", markdown)
+        self.assertIn("## RQ4. Condition Sensitivity", markdown)
+        self.assertIn("## Variability and Repair", markdown)
         self.assertIn("## Repair Effects (Repaired Runs Only)", markdown)
-        self.assertIn("## Profile `low`", markdown)
-        self.assertIn("## Repository Model Comparison", markdown)
-        self.assertIn("## Repository Model `gpt-5.4-mini`", markdown)
-        self.assertIn("## Repository Model `deepseek-v4-flash`", markdown)
-        self.assertIn("Accepted suite rate` means the pipeline accepted a generated test suite", markdown)
-        self.assertIn("Initial test compile rate", markdown)
-        self.assertIn("Final test compile rate", markdown)
+        self.assertIn("Accepted suite", markdown)
+        self.assertIn("Initial compile rate", markdown)
+        self.assertIn("Final compile rate", markdown)
         self.assertIn("Repair needed", markdown)
         self.assertIn("Avg tests", markdown)
-        self.assertIn("## Profile `low` Variability", markdown)
-        self.assertIn("## Repository Model `gpt-5.4-mini` Variability", markdown)
+        self.assertIn("Branch cov. mean", markdown)
+        self.assertIn("DeepSeek repo branch cov.", markdown)
         self.assertNotIn("Overall Outcome Counts", markdown)
         self.assertNotIn("Overall Final Generated Suite Averages", markdown)
 
@@ -195,6 +196,43 @@ class ReportSummaryTests(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    def test_write_appendix_files_includes_branch_coverage(self) -> None:
+        root = Path("tests") / "__tmp_report_summary_appendix"
+        if root.exists():
+            shutil.rmtree(root, ignore_errors=True)
+        root.mkdir(parents=True)
+        try:
+            summary = {
+                "raw_rows": [
+                    {
+                        "profile_id": "high",
+                        "repo_model": "deepseek-v4-flash",
+                        "run_id": "run-001",
+                        "test_model": "gpt-5.4-mini",
+                        "generation_status": "passed",
+                        "repair_attempts": 1,
+                        "accepted": True,
+                        "final_compiled": True,
+                        "line_coverage": 0.8571,
+                        "branch_coverage": 0.8261,
+                        "mutation_score": 0.7769,
+                    }
+                ]
+            }
+            csv_out = root / "appendix.csv"
+            md_out = root / "appendix.md"
+
+            write_appendix_files(summary, output_csv=csv_out, output_md=md_out)
+            markdown = md_out.read_text(encoding="utf-8")
+            csv_text = csv_out.read_text(encoding="utf-8")
+
+            self.assertIn("branch_coverage", csv_text.splitlines()[0])
+            self.assertIn("Line cov. | Branch cov. | Mutation", markdown)
+            self.assertIn("85.71% | 82.61% | 77.69%", markdown)
+            self.assertIn("Branch cov.", format_appendix_markdown(summary["raw_rows"]))
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
     def test_summary_markdown_reflects_written_json_payload(self) -> None:
         root = Path("tests") / "__tmp_report_summary_consistency"
         if root.exists():
@@ -210,10 +248,13 @@ class ReportSummaryTests(unittest.TestCase):
                 "models": {
                     "deepseek-v4-flash": {
                         "run_count": 2,
+                        "final_compiled_run_count": 2,
                         "accepted_suite_rate": 1.0,
                         "initial_test_compile_rate": 0.5,
                         "final_test_compile_rate": 1.0,
                         "final_pass_rate": 1.0,
+                        "compiled_final_before_disabling_pass_rate": 1.0,
+                        "compiled_repair_needed_rate": 0.5,
                         "repair_needed_rate": 0.5,
                         "repaired_run_count": 1,
                         "final_means": {
@@ -228,9 +269,9 @@ class ReportSummaryTests(unittest.TestCase):
                             "mutation_score": 0.03,
                         },
                         "final_stats": {
-                            "line_coverage": {"n": 2, "stdev": 0.02},
-                            "branch_coverage": {"n": 2, "stdev": 0.01},
-                            "mutation_score": {"n": 2, "stdev": 0.03},
+                            "line_coverage": {"n": 2, "mean": 0.81, "stdev": 0.02, "min": 0.79, "max": 0.83},
+                            "branch_coverage": {"n": 2, "mean": 0.74, "stdev": 0.01, "min": 0.73, "max": 0.75},
+                            "mutation_score": {"n": 2, "mean": 0.77, "stdev": 0.03, "min": 0.74, "max": 0.80},
                         },
                     }
                 },
@@ -239,9 +280,12 @@ class ReportSummaryTests(unittest.TestCase):
                         "models": {
                             "deepseek-v4-flash": {
                                 "run_count": 2,
+                                "final_compiled_run_count": 2,
                                 "initial_test_compile_rate": 0.5,
                                 "final_test_compile_rate": 1.0,
                                 "final_pass_rate": 1.0,
+                                "compiled_final_before_disabling_pass_rate": 1.0,
+                                "compiled_repair_needed_rate": 0.5,
                                 "repair_needed_rate": 0.5,
                                 "final_means": {
                                     "tests": 12.0,
@@ -250,9 +294,9 @@ class ReportSummaryTests(unittest.TestCase):
                                     "mutation_score": 0.77,
                                 },
                                 "final_stats": {
-                                    "line_coverage": {"n": 2, "stdev": 0.02},
-                                    "branch_coverage": {"n": 2, "stdev": 0.01},
-                                    "mutation_score": {"n": 2, "stdev": 0.03},
+                                    "line_coverage": {"n": 2, "mean": 0.81, "stdev": 0.02, "min": 0.79, "max": 0.83},
+                                    "branch_coverage": {"n": 2, "mean": 0.74, "stdev": 0.01, "min": 0.73, "max": 0.75},
+                                    "mutation_score": {"n": 2, "mean": 0.77, "stdev": 0.03, "min": 0.74, "max": 0.80},
                                 },
                             }
                         }
@@ -275,9 +319,12 @@ class ReportSummaryTests(unittest.TestCase):
                         "models": {
                             "deepseek-v4-flash": {
                                 "run_count": 2,
+                                "final_compiled_run_count": 2,
                                 "initial_test_compile_rate": 0.5,
                                 "final_test_compile_rate": 1.0,
                                 "final_pass_rate": 1.0,
+                                "compiled_final_before_disabling_pass_rate": 1.0,
+                                "compiled_repair_needed_rate": 0.5,
                                 "repair_needed_rate": 0.5,
                                 "final_means": {
                                     "tests": 12.0,
@@ -286,9 +333,9 @@ class ReportSummaryTests(unittest.TestCase):
                                     "mutation_score": 0.77,
                                 },
                                 "final_stats": {
-                                    "line_coverage": {"n": 2, "stdev": 0.02},
-                                    "branch_coverage": {"n": 2, "stdev": 0.01},
-                                    "mutation_score": {"n": 2, "stdev": 0.03},
+                                    "line_coverage": {"n": 2, "mean": 0.81, "stdev": 0.02, "min": 0.79, "max": 0.83},
+                                    "branch_coverage": {"n": 2, "mean": 0.74, "stdev": 0.01, "min": 0.73, "max": 0.75},
+                                    "mutation_score": {"n": 2, "mean": 0.77, "stdev": 0.03, "min": 0.74, "max": 0.80},
                                 },
                             }
                         },
@@ -311,14 +358,16 @@ class ReportSummaryTests(unittest.TestCase):
             )
 
             self.assertIn("- Reports aggregated: `2`", markdown)
-            self.assertIn("## Overall Results", markdown)
-            self.assertIn("| deepseek-v4-flash | 2 | 100.00% | 50.00% | 100.00% | 100.00% | 50.00% | 12.00 | 81.00% | 74.00% | 77.00% |", markdown)
-            self.assertIn("## Overall Variability", markdown)
+            self.assertIn("## RQ1. Usability", markdown)
+            self.assertIn("| deepseek-v4-flash | 2 | 50.00% | 100.00% |", markdown)
+            self.assertIn(
+                "| deepseek-v4-flash | 2 | 12.00 | 81.00% | 74.00% | 79.00%..83.00% | 73.00%..75.00% |",
+                markdown,
+            )
+            self.assertIn("## Variability and Repair", markdown)
             self.assertIn("## Repair Effects (Repaired Runs Only)", markdown)
-            self.assertIn("## Profile `low`", markdown)
-            self.assertIn("## Repository Model Comparison", markdown)
-            self.assertIn("| gpt-5.4-mini | 2 | 50.00% | 100.00% | 100.00% | 12.00 | 81.00% | 74.00% | 77.00% |", markdown)
-            self.assertIn("## Repository Model `gpt-5.4-mini`", markdown)
+            self.assertIn("## RQ4. Condition Sensitivity", markdown)
+            self.assertIn("DeepSeek repo branch cov.", markdown)
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
