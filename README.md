@@ -2,7 +2,7 @@
 
 This project is a Python pipeline for generating small Java/Maven repositories, generating JUnit 5 test suites for them with LLMs, and evaluating the generated tests with Maven, JaCoCo, and PIT mutation testing.
 
-The main single-run CLI entrypoint is `run_pipeline.py`. The intended multi-run experiment entrypoint is `run_experiment_matrix.py`. The implementation lives in the `benchmark_pipeline/` package.
+The main single-run CLI entrypoint is `run_pipeline.py`. The multi-run experiment entrypoint is `run_experiment_matrix.py`. The implementation lives in the `benchmark_pipeline/` package.
 
 ## Prerequisites
 
@@ -34,9 +34,18 @@ TEST_GEN_MODEL=gpt-4o
 # Optional DeepSeek support
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
 DEEPSEEK_BASE_URL=https://api.deepseek.com
+
+# Optional Gemini support
+GEMINI_API_KEY=your_gemini_api_key_here
+# GOOGLE_API_KEY can be used instead of GEMINI_API_KEY.
+# GEMINI_BASE_URL defaults to the Google OpenAI-compatible endpoint.
 ```
 
-Model provider selection is currently simple: model names containing `deepseek` use the DeepSeek API key and base URL; all other model names use OpenAI.
+Model provider selection is based on the model name:
+
+- Model names containing `deepseek` use the DeepSeek API key and base URL.
+- Model names containing `gemini` use `GEMINI_API_KEY` or `GOOGLE_API_KEY` with Google's OpenAI-compatible endpoint.
+- All other model names use OpenAI.
 
 ## Run The Full Pipeline
 
@@ -59,7 +68,7 @@ Run with explicit models:
 python run_pipeline.py --profile-id low --repo-model gpt-5.4-mini --tests-model gpt-4o
 ```
 
-Run the intended model-comparison workflow with one baseline generator and multiple test-suite generators:
+Run a model-comparison workflow with one baseline generator and multiple test-suite generators:
 
 ```powershell
 python run_pipeline.py --profile-id high --repo-model gpt-5.4-mini --tests-models gpt-4o gpt-5.4-mini gpt-4o-mini
@@ -97,7 +106,7 @@ Evaluation then compares all generated suites against the same baseline reposito
 
 ## Run The Full Experiment Matrix
 
-Use `run_experiment_matrix.py` for the intended thesis experiment workflow across profiles, baseline-generation models, and preserved repetitions.
+Use `run_experiment_matrix.py` for repeated experiments across profiles, baseline-generation models, and preserved repetitions.
 
 Run the default matrix:
 
@@ -139,7 +148,7 @@ Operational note:
 
 - If you manually interrupt the matrix runner during a run, delete that latest partial `run-*` directory before restarting. The runner currently infers progress from existing run directories.
 
-To aggregate many preserved `comparison_report.json` files into one study-level summary, run:
+To aggregate many preserved `comparison_report.json` files into one summary, run:
 
 ```powershell
 python summarize_comparison_reports.py
@@ -149,6 +158,8 @@ By default this scans `run_outputs/runs/` and writes:
 
 - `run_outputs/summary/comparison_reports_summary.json`
 - `run_outputs/summary/comparison_reports_summary.md`
+- `run_outputs/summary/comparison_reports_appendix.csv`
+- `run_outputs/summary/comparison_reports_appendix.md`
 
 ## Outputs
 
@@ -164,6 +175,10 @@ The main generated files and folders are:
 - `run_outputs/runs/<model-combination>/run-N/reports/pit-reports/_final_selected/<model-name>/`: copied PIT XML/HTML reports for final evaluated test suites
 - `run_outputs/runs/<model-combination>/run-N/reports/pit-reports/_initial_snapshot/<model-name>/`: copied PIT XML/HTML reports for initial evaluated test suites
 - `run_outputs/runs/experiment_timing_summary.json`: timing summary for the latest `run_experiment_matrix.py` invocation
+- `run_outputs/summary/comparison_reports_summary.json`: aggregated machine-readable summary across preserved runs
+- `run_outputs/summary/comparison_reports_summary.md`: aggregated Markdown summary across preserved runs
+- `run_outputs/summary/comparison_reports_appendix.csv`: per-run CSV export across preserved runs
+- `run_outputs/summary/comparison_reports_appendix.md`: per-run Markdown export across preserved runs
 
 Temporary staged repositories are created under each run directory's `.staging/` folder during evaluation and can be deleted after a run.
 
