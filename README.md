@@ -14,6 +14,14 @@ The main single-run CLI entrypoint is `run_pipeline.py`. The multi-run experimen
 
 ## Install
 
+Install the Python dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+Using a virtual environment is recommended, but not required:
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
